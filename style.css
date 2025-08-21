@@ -1,0 +1,88 @@
+body {
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    background-color: #1a202c; /* Equivalent to Tailwind's gray-900 */
+}
+#map-container {
+    touch-action: none;
+}
+.territory-rect {
+    stroke: #4a5568; /* gray-600 */
+    stroke-width: 2;
+    transition: filter 0.2s ease-in-out, fill 0.5s ease;
+    cursor: pointer;
+    rx: 8px; /* rounded corners */
+}
+.territory-rect:hover {
+    filter: brightness(1.2);
+}
+.territory-rect.selected {
+    filter: drop-shadow(0 0 8px #fff);
+    stroke-width: 4px;
+    stroke: #fff;
+}
+.territory-rect.selectable {
+    filter: drop-shadow(0 0 6px #63b3ed); /* blue-400 */
+}
+.territory-rect.selectable-target {
+     filter: drop-shadow(0 0 6px #f56565); /* red-500 */
+}
+.army-label {
+    font-size: 24px;
+    font-weight: bold;
+    fill: white;
+    stroke: black;
+    stroke-width: 0.7px;
+    pointer-events: none;
+    text-anchor: middle;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+.territory-name-label {
+     font-size: 12px;
+    font-weight: 600;
+    fill: white;
+    pointer-events: none;
+    text-anchor: middle;
+}
+.player-panel {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+.dice {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: bold;
+    color: white;
+}
+.attacker-dice { background-color: #c53030; } /* red-700 */
+.defender-dice { background-color: #2c5282; } /* blue-800 */
+.balance-bar {
+    transition: width 0.5s ease-in-out;
+}
+.connection-line {
+    stroke: #4a5568; /* gray-600 */
+    stroke-width: 3;
+    stroke-dasharray: 5, 5;
+}
+@keyframes flash {
+    0% { filter: brightness(1.5) drop-shadow(0 0 10px #fff); }
+    50% { filter: brightness(2.5) drop-shadow(0 0 20px #fff); }
+    100% { filter: brightness(1.0); }
+}
+.conquered {
+    animation: flash 0.8s ease-out;
+}
+@keyframes fighting-glow {
+    0% { filter: drop-shadow(0 0 6px #f6e05e); } /* yellow-300 */
+    50% { filter: drop-shadow(0 0 12px #f6e05e); }
+    100% { filter: drop-shadow(0 0 6px #f6e05e); }
+}
+.fighting {
+    animation: fighting-glow 1s ease-in-out infinite;
+}
