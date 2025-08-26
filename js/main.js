@@ -18,5 +18,7 @@ window.onload = () => {
         ui.winnerModal.classList.add('hidden');
         ui.gameContainer.style.display = 'none';
         ui.startupModal.classList.remove('hidden');
+        // Reset pan/zoom for next game
+        setupPanZoom();
     });
 };

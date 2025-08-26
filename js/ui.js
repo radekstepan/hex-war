@@ -16,7 +16,7 @@ export const ui = {
     armiesToDeployEl: document.getElementById('armies-to-deploy'),
     reinforcementsInfoEl: document.getElementById('reinforcements-info'),
     nextPhaseBtn: document.getElementById('next-phase-btn'),
-    logMessagesEl: document.getElementById('log-messages'),
+    lastLogMessageEl: document.getElementById('last-log-message'),
     attackModal: document.getElementById('attack-modal'),
     winnerModal: document.getElementById('winner-modal'),
     fortifyModal: document.getElementById('fortify-modal'),
@@ -41,12 +41,9 @@ export function renderMap() {
     ui.mapSvg.innerHTML = '';
     const connectionsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const territoriesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    const markersGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    markersGroup.id = 'capital-markers-group';
-
+    
     ui.mapSvg.appendChild(connectionsGroup);
     ui.mapSvg.appendChild(territoriesGroup);
-    ui.mapSvg.appendChild(markersGroup);
 
     const drawnConnections = new Set();
     for (const tId in territoriesData) {
@@ -90,35 +87,6 @@ export function renderMap() {
         territoriesGroup.appendChild(armyLabel);
     }
 }
-
-export function renderCapitalMarkers(players) {
-    const markersGroup = document.getElementById('capital-markers-group');
-    if (!markersGroup) return;
-    markersGroup.innerHTML = '';
-
-    players.forEach(player => {
-        const tId = player.capitalTerritory;
-        if (!tId || !territoriesData[tId]) return;
-
-        // FOG OF WAR: Only render capital markers for revealed territories
-        if (!state.gameState.revealedTerritories.has(tId)) {
-            return;
-        }
-
-        const territory = territoriesData[tId];
-        const x = territory.gridX * (TILE_WIDTH + TILE_GAP);
-        const y = territory.gridY * (TILE_HEIGHT + TILE_GAP);
-        const starX = x + TILE_WIDTH - 20;
-        const starY = y + 20;
-
-        const star = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        star.setAttribute('d', 'M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z');
-        star.setAttribute('transform', `translate(${starX - 12}, ${starY - 12}) scale(0.8)`);
-        star.classList.add('capital-marker');
-        markersGroup.appendChild(star);
-    });
-}
-
 
 // --- UI UPDATES ---
 function updateBalanceOfPower() {
@@ -164,7 +132,6 @@ export function updateUI() {
         ui.nextPhaseBtn.onclick = endTurn;
     }
 
-    // Update connection lines based on fog of war
     const drawnConnections = new Set();
     for (const tId in territoriesData) {
         territoriesData[tId].adj.forEach(adjId => {
@@ -181,6 +148,8 @@ export function updateUI() {
         });
     }
 
+    const capitalTerritories = new Set(state.gameState.players.map(p => p.capitalTerritory));
+
     for (const tId in territoriesData) {
         const rect = document.getElementById(`rect-${tId}`);
         const label = document.getElementById(`label-${tId}`);
@@ -188,6 +157,12 @@ export function updateUI() {
         const territoryState = state.gameState.territories[tId];
         
         const isRevealed = state.gameState.revealedTerritories.has(tId);
+
+        if (nameLabel) {
+            const isCapital = capitalTerritories.has(tId);
+            nameLabel.textContent = isCapital ? `★ ${territoriesData[tId].name}` : territoriesData[tId].name;
+            nameLabel.classList.toggle('capital-name-label', isCapital);
+        }
 
         if (!isRevealed) {
             if (rect) {
@@ -197,10 +172,9 @@ export function updateUI() {
             }
             if (label) label.textContent = '???';
             if (nameLabel) nameLabel.style.display = 'none';
-            continue; // Skip to next territory
+            continue; 
         }
 
-        // --- RENDER REVEALED TERRITORY ---
         if (nameLabel) nameLabel.style.display = 'block';
 
         if (territoryState && rect) {
@@ -208,10 +182,8 @@ export function updateUI() {
             label.textContent = territoryState.armies;
             if (owner) {
                 rect.style.fill = owner.color;
-                // Set the CSS variable for the glow effect
                 rect.style.setProperty('--glow-color', owner.color);
             } else {
-                // If there is no owner, remove the glow
                 rect.style.setProperty('--glow-color', 'transparent');
             }
         }
@@ -229,25 +201,23 @@ export function updateUI() {
             else if (territoryState.ownerId === currentPlayer.id) rect?.classList.add('selectable');
         }
     }
-
-    renderCapitalMarkers(state.gameState.players);
     ui.nextPhaseBtn.disabled = state.gameState.isBlitzing;
 }
 
 
 export function logMessage(message, colorClass = 'text-gray-300') {
-    const p = document.createElement('p');
-    p.textContent = `> ${message}`;
-    p.className = colorClass;
-    ui.logMessagesEl.appendChild(p);
-    ui.logMessagesEl.scrollTop = ui.logMessagesEl.scrollHeight;
+    if (ui.lastLogMessageEl) {
+        ui.lastLogMessageEl.innerHTML = `<span class="${colorClass}">${message}</span>`;
+    }
 }
 
 export function clearLog() {
-    ui.logMessagesEl.innerHTML = '';
+    if (ui.lastLogMessageEl) {
+        ui.lastLogMessageEl.innerHTML = '';
+    }
 }
 
-// --- MODAL LOGIC (unchanged from previous version) ---
+// --- MODAL LOGIC ---
 export function showAttackModal(sourceId, targetId) {
     state.setAttackContext(sourceId, targetId);
     const attacker = state.getCurrentPlayer();
@@ -285,7 +255,7 @@ export function showAttackModal(sourceId, targetId) {
 }
 
 export function updateAttackModalAfterBattle(showContinue = true) {
-    const { sourceId, targetId } = state.gameState.attackContext;
+    const { sourceId } = state.gameState.attackContext;
     const sourceState = state.gameState.territories[sourceId];
 
     document.getElementById('attack-options').classList.add('hidden');
@@ -294,7 +264,7 @@ export function updateAttackModalAfterBattle(showContinue = true) {
     if (showContinue) {
         document.getElementById('continue-options').classList.remove('hidden');
         document.getElementById('continue-attack-btn').disabled = sourceState.armies <= 1;
-        document.getElementById('continue-attack-btn').onclick = () => showAttackModal(sourceId, targetId);
+        document.getElementById('continue-attack-btn').onclick = () => showAttackModal(sourceId, state.gameState.attackContext.targetId);
         document.getElementById('stop-attack-btn').onclick = closeAttackModal;
     }
 }
@@ -360,37 +330,84 @@ export function showWinnerModal(winner) {
 }
 
 // --- PAN & ZOOM ---
+let scale = 1, pan = { x: 0, y: 0 };
+let currentWheelListener, currentPointerDownListener, currentPointerMoveListener, currentPointerUpListener;
+
+const updateTransform = () => {
+    if (ui.mapSvg) {
+        // We now manipulate a group inside the SVG, not the SVG itself.
+        const g = ui.mapSvg.querySelector('g');
+        if (g) {
+            g.setAttribute('transform', `translate(${pan.x}, ${pan.y}) scale(${scale})`);
+        }
+    }
+};
+
 export function setupPanZoom() {
     const mapContainer = document.getElementById('map-container');
-    let isPanning = false, scale = 1;
-    let startPoint = { x: 0, y: 0 }, pan = { x: 0, y: 0 };
-    const updateTransform = () => { ui.mapSvg.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`; };
-    mapContainer.addEventListener('wheel', e => {
+    let isPanning = false;
+    let startPoint = { x: 0, y: 0 };
+    
+    // Reset pan and zoom state for a new game
+    scale = 1;
+    pan = { x: 0, y: 0 };
+    // This transform will now apply to the group, not the SVG, so we reset it.
+    if (ui.mapSvg.querySelector('g')) {
+         ui.mapSvg.querySelector('g').setAttribute('transform', '');
+    }
+
+    const onWheel = e => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
-        const newScale = Math.max(0.2, Math.min(3, scale + delta));
-        const rect = ui.mapSvg.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
+        const newScale = Math.max(0.5, Math.min(5, scale + delta));
+        
+        const rect = mapContainer.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Adjust pan based on mouse position
         pan.x = mouseX - (mouseX - pan.x) * (newScale / scale);
         pan.y = mouseY - (mouseY - pan.y) * (newScale / scale);
+
         scale = newScale;
         updateTransform();
-    });
-    mapContainer.addEventListener('pointerdown', e => {
+    };
+
+    const onPointerDown = e => {
         if (e.target.closest('.territory-rect')) return;
         isPanning = true;
         startPoint = { x: e.clientX, y: e.clientY };
         mapContainer.style.cursor = 'grabbing';
-    });
-    mapContainer.addEventListener('pointermove', e => {
+    };
+
+    const onPointerMove = e => {
         if (!isPanning) return;
         pan.x += e.clientX - startPoint.x;
         pan.y += e.clientY - startPoint.y;
         startPoint = { x: e.clientX, y: e.clientY };
         updateTransform();
-    });
-    window.addEventListener('pointerup', () => {
+    };
+
+    const onPointerUp = () => {
         isPanning = false;
         mapContainer.style.cursor = 'grab';
-    });
+    };
+
+    // Clear previous listeners if they exist to prevent duplicates on restart
+    if (currentWheelListener) mapContainer.removeEventListener('wheel', currentWheelListener);
+    if (currentPointerDownListener) mapContainer.removeEventListener('pointerdown', currentPointerDownListener);
+    if (currentPointerMoveListener) window.removeEventListener('pointermove', currentPointerMoveListener);
+    if (currentPointerUpListener) window.removeEventListener('pointerup', currentPointerUpListener);
+
+    // Store the new listeners
+    currentWheelListener = onWheel;
+    currentPointerDownListener = onPointerDown;
+    currentPointerMoveListener = onPointerMove;
+    currentPointerUpListener = onPointerUp;
+
+    // Add new listeners
+    mapContainer.addEventListener('wheel', currentWheelListener);
+    mapContainer.addEventListener('pointerdown', currentPointerDownListener);
+    window.addEventListener('pointermove', currentPointerMoveListener);
+    window.addEventListener('pointerup', currentPointerUpListener);
 }

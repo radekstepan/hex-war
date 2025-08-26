@@ -11,55 +11,56 @@
 <body class="bg-gray-900 text-white select-none">
 
     <div id="game-container" class="w-screen h-screen flex-col items-center justify-center relative hidden">
-        <!-- Balance of Power -->
-        <div class="absolute top-0 left-0 w-full h-8 bg-gray-800 shadow-lg z-10 flex items-center px-4">
-            <div id="balance-of-power-container" class="w-full h-4 bg-gray-700 rounded-full flex overflow-hidden">
+        <!-- Top UI Bar -->
+        <div id="top-ui-bar" class="absolute top-0 left-0 w-full p-2 z-10">
+            <!-- Balance Bar -->
+            <div id="balance-of-power-container" class="w-full h-4 bg-gray-700 rounded-full flex overflow-hidden shadow-lg mx-auto max-w-7xl">
                 <!-- Player bars will be injected here -->
             </div>
+            <!-- Main Info Bar -->
+            <div id="info-bar" class="w-full max-w-7xl mx-auto flex justify-between items-center mt-2 p-3 rounded-2xl ui-panel">
+                <!-- Left Side: Player Info -->
+                <div id="player-info" class="flex items-center space-x-3 w-1/4">
+                    <div id="player-color-indicator" class="w-8 h-8 rounded-full flex-shrink-0"></div>
+                    <div class="flex flex-col leading-tight">
+                        <span class="text-xs text-gray-400">Current Player</span>
+                        <span id="player-name" class="text-lg font-bold">Player Name</span>
+                    </div>
+                </div>
+                <!-- Center: Game State -->
+                <div id="game-state-info" class="flex items-center justify-center space-x-6 text-center">
+                    <div>
+                        <span class="text-xs text-gray-400">Game Phase</span>
+                        <p id="game-phase" class="text-lg font-bold text-blue-400 capitalize">Phase</p>
+                    </div>
+                    <div id="reinforcements-info" class="hidden">
+                        <span class="text-xs text-gray-400">Armies to Deploy</span>
+                        <p id="armies-to-deploy" class="text-2xl font-bold text-green-400">0</p>
+                    </div>
+                    <div id="ai-status" class="hidden mt-2 text-yellow-400 font-semibold animate-pulse">
+                        AI turn in progress...
+                    </div>
+                </div>
+                <!-- Right Side: Log & Actions -->
+                <div id="actions-info" class="flex items-center justify-end space-x-4 w-1/4">
+                    <p id="last-log-message" class="text-sm text-right text-gray-400 w-full truncate"></p>
+                    <button id="next-phase-btn" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-md transition-transform transform hover:scale-105 shadow-lg whitespace-nowrap">End Phase</button>
+                </div>
+            </div>
         </div>
+
 
         <!-- Map -->
-        <div id="map-container" class="relative w-full h-full flex items-center justify-center pt-8">
-             <svg id="map-svg" viewBox="0 0 1600 800" class="w-full h-full object-contain">
+        <div id="map-container" class="relative w-full h-full flex items-center justify-center">
+             <svg id="map-svg" viewBox="-50 -50 1550 900" class="w-full h-full object-contain">
                 <!-- SVG map will be injected here by JS -->
              </svg>
-        </div>
-
-        <!-- UI Panels -->
-        <div class="absolute top-12 left-4 flex flex-col space-y-4 z-10">
-            <div id="player-panel" class="player-panel bg-gray-800 p-4 rounded-lg w-64">
-                <h2 class="text-xl font-bold mb-2">Current Player</h2>
-                <div class="flex items-center space-x-3">
-                    <div id="player-color-indicator" class="w-6 h-6 rounded-full"></div>
-                    <span id="player-name" class="text-lg"></span>
-                </div>
-                <div id="ai-status" class="hidden mt-2 text-yellow-400 font-semibold animate-pulse">
-                    AI turn in progress...
-                </div>
-                <div class="mt-4">
-                    <h3 class="font-semibold">Game Phase:</h3>
-                    <p id="game-phase" class="text-lg text-blue-400 capitalize"></p>
-                </div>
-                <div id="reinforcements-info" class="mt-2 hidden">
-                    <h3 class="font-semibold">Armies to Deploy:</h3>
-                    <p id="armies-to-deploy" class="text-2xl font-bold text-green-400"></p>
-                </div>
-            </div>
-            <div id="log-panel" class="player-panel bg-gray-800 p-4 rounded-lg w-64 h-48">
-                <h2 class="text-lg font-bold mb-2 border-b border-gray-700 pb-1">Game Log</h2>
-                <div id="log-messages" class="text-sm space-y-1 overflow-y-auto h-32"></div>
-            </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div id="action-buttons" class="absolute bottom-4 right-4 flex space-x-4 z-10">
-            <button id="next-phase-btn" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-lg transition-transform transform hover:scale-105 shadow-lg">End Attack Phase</button>
         </div>
     </div>
 
     <!-- Modals -->
     <div id="startup-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="bg-gray-800 p-8 rounded-lg text-center">
+        <div class="ui-panel p-8 rounded-lg text-center">
             <h1 class="text-4xl font-bold mb-6">Grid Conquest</h1>
             <div class="mb-6">
                 <label for="ai-player-select" class="block text-lg mb-2">Select Number of AI Opponents:</label>
@@ -82,7 +83,7 @@
         </div>
     </div>
     <div id="attack-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="bg-gray-800 p-8 rounded-lg text-center max-w-md w-full">
+        <div class="ui-panel p-8 rounded-lg text-center max-w-md w-full">
             <h2 class="text-2xl font-bold mb-4">Attack!</h2>
             <div class="flex justify-between items-center mb-6">
                 <div class="w-1/2 text-left"><p id="attacker-name" class="font-bold text-lg"></p><p id="attacker-territory" class="text-sm text-gray-400"></p></div>
@@ -113,7 +114,7 @@
         </div>
     </div>
     <div id="fortify-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="bg-gray-800 p-8 rounded-lg text-center max-w-sm w-full">
+        <div class="ui-panel p-8 rounded-lg text-center max-w-sm w-full">
             <h2 class="text-2xl font-bold mb-4">Fortify Position</h2>
             <p class="mb-2">Move armies from <span id="fortify-from" class="font-bold"></span></p>
             <p class="mb-4">to <span id="fortify-to" class="font-bold"></span>.</p>
@@ -126,7 +127,7 @@
         </div>
     </div>
     <div id="winner-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="bg-gray-800 p-8 rounded-lg text-center">
+        <div class="ui-panel p-8 rounded-lg text-center">
             <h2 class="text-4xl font-bold mb-4">Victory!</h2>
             <p id="winner-name" class="text-2xl mb-6"></p>
             <button id="restart-game-btn" class="px-8 py-4 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-xl">Play Again</button>

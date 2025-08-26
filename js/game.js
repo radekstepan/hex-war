@@ -105,7 +105,6 @@ export function setupGame(numAI, aiSpeed) {
 
     ui.clearLog();
     ui.logMessage('Game started! Your turn.');
-    ui.renderCapitalMarkers(state.gameState.players); // Render the capital stars
     startTurn();
 }
 
@@ -184,7 +183,8 @@ export function onTerritoryClick(tId) {
             if (!fortify.source) {
                 if (territoryState.ownerId === currentPlayer.id && territoryState.armies > 1) state.setFortifySource(tId);
             } else {
-                if (territoryState.ownerId === currentPlayer.id && tId !== fortify.source && isPathBetween(fortify.source, tId, currentPlayer.id)) {
+                // MODIFIED: Check for adjacency instead of a path
+                if (territoryState.ownerId === currentPlayer.id && tId !== fortify.source && territoriesData[fortify.source].adj.includes(tId)) {
                     state.setFortifyTarget(tId);
                     ui.showFortifyModal(fortify.source, tId);
                 } else {
@@ -373,21 +373,6 @@ function calculateReinforcements(playerId) {
     }
 
     return reinforcements;
-}
-
-function isPathBetween(startNode, endNode, playerId) {
-    let queue = [startNode], visited = new Set([startNode]);
-    while (queue.length > 0) {
-        let currentNode = queue.shift();
-        if (currentNode === endNode) return true;
-        for (const neighbor of territoriesData[currentNode].adj) {
-            if (!visited.has(neighbor) && state.gameState.territories[neighbor]?.ownerId === playerId) {
-                visited.add(neighbor);
-                queue.push(neighbor);
-            }
-        }
-    }
-    return false;
 }
 
 export function rollDice(count) {

@@ -103,23 +103,35 @@ function executeAIFortify() {
     const myTerritories = Object.keys(state.gameState.territories).filter(tId => state.gameState.territories[tId].ownerId === player.id);
     const possibleMoves = [];
 
-    myTerritories.forEach(tId => {
-        if (state.gameState.territories[tId].armies > 1) {
-            const isSafe = !territoriesData[tId].adj.some(adjId => state.gameState.territories[adjId].ownerId !== player.id);
-            if (isSafe) {
-                 myTerritories.forEach(destId => {
-                    if (tId !== destId) {
-                        const isBorder = territoriesData[destId].adj.some(adjId => state.gameState.territories[adjId].ownerId !== player.id);
-                        if(isBorder) {
-                            possibleMoves.push({ from: tId, to: destId, armies: state.gameState.territories[tId].armies - 1 });
-                        }
+    // Helper to check if a territory is on the border
+    const isBorderTerritory = (tId) => {
+        return territoriesData[tId].adj.some(adjId => state.gameState.territories[adjId].ownerId !== player.id);
+    };
+
+    myTerritories.forEach(fromId => {
+        // Must have armies to move
+        if (state.gameState.territories[fromId].armies > 1) {
+            const isFromBorder = isBorderTerritory(fromId);
+
+            // Find adjacent friendly territories
+            territoriesData[fromId].adj.forEach(toId => {
+                // Check if 'to' is a friendly territory
+                if (state.gameState.territories[toId].ownerId === player.id) {
+                    const isToBorder = isBorderTerritory(toId);
+                    
+                    // The best moves are from safe zones to the frontline
+                    if (!isFromBorder && isToBorder) {
+                        // Move all but one army
+                        const armiesToMove = state.gameState.territories[fromId].armies - 1;
+                        possibleMoves.push({ from: fromId, to: toId, armies: armiesToMove });
                     }
-                });
-            }
+                }
+            });
         }
     });
 
     if (possibleMoves.length > 0) {
+        // Find the move that transfers the most armies
         const bestMove = possibleMoves.sort((a,b) => b.armies - a.armies)[0];
         state.gameState.territories[bestMove.from].armies -= bestMove.armies;
         state.gameState.territories[bestMove.to].armies += bestMove.armies;
