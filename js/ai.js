@@ -8,18 +8,17 @@ function executeAIReinforce() {
     const myTerritories = Object.keys(state.gameState.territories).filter(tId => state.gameState.territories[tId].ownerId === player.id);
 
     if (myTerritories.length === 0) {
-        return; 
+        return;
     }
-    
-    // Simple AI: reinforce a random border territory
-    const borderTerritories = myTerritories.filter(tId => 
+
+    const borderTerritories = myTerritories.filter(tId =>
         territoriesData[tId].adj.some(adjId => state.gameState.territories[adjId].ownerId !== player.id)
     );
-    
-    const territoryToReinforce = borderTerritories.length > 0 
-        ? borderTerritories[Math.floor(Math.random() * borderTerritories.length)] 
+
+    const territoryToReinforce = borderTerritories.length > 0
+        ? borderTerritories[Math.floor(Math.random() * borderTerritories.length)]
         : myTerritories[0];
-        
+
     ui.logMessage(`AI reinforces ${territoriesData[territoryToReinforce].name} with ${player.armiesToDeploy} armies.`);
     state.gameState.territories[territoryToReinforce].armies += player.armiesToDeploy;
     player.armiesToDeploy = 0;
@@ -38,33 +37,31 @@ function executeAIAttacks(callback) {
             });
         }
     }
-    
-    // Filter for "good" attacks where attacker has more armies
+
     const goodAttacks = possibleAttacks.filter(attack => state.gameState.territories[attack.from].armies > state.gameState.territories[attack.to].armies);
-    
-    // Stop attacking if no good attacks are left or randomly
+
     if (goodAttacks.length === 0 || Math.random() > 0.8) {
         ui.logMessage("AI concludes its attack phase.");
         callback();
         return;
     }
 
-    const attack = goodAttacks.sort((a,b) => state.gameState.territories[b.from].armies - state.gameState.territories[a.from].armies)[0];
-    
+    const attack = goodAttacks.sort((a, b) => state.gameState.territories[b.from].armies - state.gameState.territories[a.from].armies)[0];
+
+    ui.logMessage(`AI attacks ${territoriesData[attack.to].name} from ${territoriesData[attack.from].name}.`);
     const fromRect = document.getElementById(`rect-${attack.from}`);
     const toRect = document.getElementById(`rect-${attack.to}`);
     fromRect?.classList.add('fighting');
     toRect?.classList.add('fighting');
-    ui.logMessage(`AI attacks ${territoriesData[attack.to].name} from ${territoriesData[attack.from].name}.`);
-    
+
     setTimeout(() => {
         const attackerState = state.gameState.territories[attack.from];
         const defenderState = state.gameState.territories[attack.to];
-        
-        if (!attackerState || !defenderState) { // Safeguard if a territory was eliminated
+
+        if (!attackerState || !defenderState) {
             fromRect?.classList.remove('fighting');
             toRect?.classList.remove('fighting');
-            setTimeout(() => executeAIAttacks(callback), 1500);
+            executeAIAttacks(callback);
             return;
         }
 
@@ -73,15 +70,15 @@ function executeAIAttacks(callback) {
         const attackerRolls = rollDice(attackerDice).sort((a, b) => b - a);
         const defenderRolls = rollDice(defenderDice).sort((a, b) => b - a);
         let attackerLosses = 0, defenderLosses = 0;
-        
+
         for (let i = 0; i < Math.min(attackerRolls.length, defenderRolls.length); i++) {
             if (attackerRolls[i] > defenderRolls[i]) defenderLosses++; else attackerLosses++;
         }
-        
+
         attackerState.armies -= attackerLosses;
         defenderState.armies -= defenderLosses;
         ui.logMessage(`Battle Result: Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`, 'text-yellow-400');
-        
+
         if (defenderState.armies <= 0) {
             ui.logMessage(`AI conquered ${territoriesData[attack.to].name}!`, 'text-green-400');
             defenderState.ownerId = player.id;
@@ -91,12 +88,14 @@ function executeAIAttacks(callback) {
             defenderState.armies = armiesToMove;
             attackerState.armies -= armiesToMove;
         }
-        
+
         ui.updateUI();
         fromRect?.classList.remove('fighting');
         toRect?.classList.remove('fighting');
-        setTimeout(() => executeAIAttacks(callback), 1500);
-    }, 1500);
+
+        executeAIAttacks(callback);
+
+    }, state.gameState.aiBattleSpeed);
 }
 
 function executeAIFortify() {
@@ -104,13 +103,12 @@ function executeAIFortify() {
     const myTerritories = Object.keys(state.gameState.territories).filter(tId => state.gameState.territories[tId].ownerId === player.id);
     const possibleMoves = [];
 
-    // Find safe, inland territories with surplus armies to move to border territories
     myTerritories.forEach(tId => {
         if (state.gameState.territories[tId].armies > 1) {
             const isSafe = !territoriesData[tId].adj.some(adjId => state.gameState.territories[adjId].ownerId !== player.id);
             if (isSafe) {
                  myTerritories.forEach(destId => {
-                    if (tId !== destId) { // simplified path check
+                    if (tId !== destId) {
                         const isBorder = territoriesData[destId].adj.some(adjId => state.gameState.territories[adjId].ownerId !== player.id);
                         if(isBorder) {
                             possibleMoves.push({ from: tId, to: destId, armies: state.gameState.territories[tId].armies - 1 });
@@ -133,28 +131,25 @@ function executeAIFortify() {
 }
 
 export function executeAITurn() {
+    const phaseDelay = Math.max(250, state.gameState.aiBattleSpeed / 2);
     changePhase('REINFORCE');
-    
-    // Reinforce phase
+
     setTimeout(() => {
         executeAIReinforce();
-        
-        // Attack phase
+
         setTimeout(() => {
             changePhase('ATTACK');
             executeAIAttacks(() => {
-                
-                // Fortify phase
+
                 setTimeout(() => {
                     changePhase('FORTIFY');
                     executeAIFortify();
-                    
-                    // End turn
+
                     setTimeout(() => {
                         endTurn();
-                    }, 1000);
-                }, 1000);
+                    }, phaseDelay);
+                }, phaseDelay);
             });
-        }, 1000);
-    }, 1000);
+        }, phaseDelay);
+    }, phaseDelay);
 }

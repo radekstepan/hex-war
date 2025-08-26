@@ -1,6 +1,6 @@
 import { TILE_WIDTH, TILE_HEIGHT, TILE_GAP, territoriesData, continentsData } from './constants.js';
 import * as state from './state.js';
-import { onTerritoryClick, performAttack, confirmFortify, cancelFortify, endAttackPhase, endTurn } from './game.js';
+import { onTerritoryClick, performAttack, performBlitzAttack, stopBlitz, confirmFortify, cancelFortify, endAttackPhase, endTurn } from './game.js';
 
 // --- DOM ELEMENTS ---
 export const ui = {
@@ -8,6 +8,7 @@ export const ui = {
     startupModal: document.getElementById('startup-modal'),
     startGameBtn: document.getElementById('start-game-btn'),
     aiPlayerSelect: document.getElementById('ai-player-select'),
+    aiSpeedSelect: document.getElementById('ai-speed-select'),
     mapSvg: document.getElementById('map-svg'),
     playerNameEl: document.getElementById('player-name'),
     playerColorIndicatorEl: document.getElementById('player-color-indicator'),
@@ -22,6 +23,9 @@ export const ui = {
     restartGameBtn: document.getElementById('restart-game-btn'),
     aiStatusEl: document.getElementById('ai-status'),
     balanceContainer: document.getElementById('balance-of-power-container'),
+    blitzAttackBtn: document.getElementById('blitz-attack-btn'),
+    blitzOptions: document.getElementById('blitz-options'),
+    stopBlitzBtn: document.getElementById('stop-blitz-btn'),
 };
 
 // --- MAP RENDERING ---
@@ -37,8 +41,13 @@ export function renderMap() {
     ui.mapSvg.innerHTML = '';
     const connectionsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const territoriesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const markersGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    markersGroup.id = 'capital-markers-group';
+
     ui.mapSvg.appendChild(connectionsGroup);
     ui.mapSvg.appendChild(territoriesGroup);
+    ui.mapSvg.appendChild(markersGroup);
+
     const drawnConnections = new Set();
     for (const tId in territoriesData) {
         const territory = territoriesData[tId];
@@ -48,6 +57,7 @@ export function renderMap() {
             if (!drawnConnections.has(connId1) && !drawnConnections.has(connId2)) {
                 const { x: x2, y: y2 } = getTerritoryCenter(adjId);
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('id', `line-${connId1}`);
                 line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
                 line.classList.add('connection-line');
                 connectionsGroup.appendChild(line);
@@ -68,6 +78,7 @@ export function renderMap() {
         rect.addEventListener('click', () => onTerritoryClick(tId));
         territoriesGroup.appendChild(rect);
         const nameLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        nameLabel.setAttribute('id', `name-label-${tId}`);
         nameLabel.setAttribute('x', x + TILE_WIDTH / 2); nameLabel.setAttribute('y', y + 20);
         nameLabel.classList.add('territory-name-label');
         nameLabel.textContent = territory.name;
@@ -79,6 +90,35 @@ export function renderMap() {
         territoriesGroup.appendChild(armyLabel);
     }
 }
+
+export function renderCapitalMarkers(players) {
+    const markersGroup = document.getElementById('capital-markers-group');
+    if (!markersGroup) return;
+    markersGroup.innerHTML = '';
+
+    players.forEach(player => {
+        const tId = player.capitalTerritory;
+        if (!tId || !territoriesData[tId]) return;
+
+        // FOG OF WAR: Only render capital markers for revealed territories
+        if (!state.gameState.revealedTerritories.has(tId)) {
+            return;
+        }
+
+        const territory = territoriesData[tId];
+        const x = territory.gridX * (TILE_WIDTH + TILE_GAP);
+        const y = territory.gridY * (TILE_HEIGHT + TILE_GAP);
+        const starX = x + TILE_WIDTH - 20;
+        const starY = y + 20;
+
+        const star = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        star.setAttribute('d', 'M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z');
+        star.setAttribute('transform', `translate(${starX - 12}, ${starY - 12}) scale(0.8)`);
+        star.classList.add('capital-marker');
+        markersGroup.appendChild(star);
+    });
+}
+
 
 // --- UI UPDATES ---
 function updateBalanceOfPower() {
@@ -124,16 +164,60 @@ export function updateUI() {
         ui.nextPhaseBtn.onclick = endTurn;
     }
 
+    // Update connection lines based on fog of war
+    const drawnConnections = new Set();
+    for (const tId in territoriesData) {
+        territoriesData[tId].adj.forEach(adjId => {
+            const connId1 = `${tId}-${adjId}`;
+            const connId2 = `${adjId}-${tId}`;
+            if (!drawnConnections.has(connId1) && !drawnConnections.has(connId2)) {
+                const line = document.getElementById(`line-${connId1}`);
+                if (line) {
+                    const isVisible = state.gameState.revealedTerritories.has(tId) && state.gameState.revealedTerritories.has(adjId);
+                    line.style.display = isVisible ? 'block' : 'none';
+                }
+                drawnConnections.add(connId1);
+            }
+        });
+    }
+
     for (const tId in territoriesData) {
         const rect = document.getElementById(`rect-${tId}`);
         const label = document.getElementById(`label-${tId}`);
+        const nameLabel = document.getElementById(`name-label-${tId}`);
         const territoryState = state.gameState.territories[tId];
+        
+        const isRevealed = state.gameState.revealedTerritories.has(tId);
+
+        if (!isRevealed) {
+            if (rect) {
+                rect.style.fill = '#2d3748'; // dark grey fog color
+                rect.style.setProperty('--glow-color', 'transparent');
+                rect.classList.remove('selected', 'selectable', 'selectable-target', 'fighting');
+            }
+            if (label) label.textContent = '???';
+            if (nameLabel) nameLabel.style.display = 'none';
+            continue; // Skip to next territory
+        }
+
+        // --- RENDER REVEALED TERRITORY ---
+        if (nameLabel) nameLabel.style.display = 'block';
+
         if (territoryState && rect) {
             const owner = state.getPlayerById(territoryState.ownerId);
-            rect.style.fill = owner.color;
             label.textContent = territoryState.armies;
+            if (owner) {
+                rect.style.fill = owner.color;
+                // Set the CSS variable for the glow effect
+                rect.style.setProperty('--glow-color', owner.color);
+            } else {
+                // If there is no owner, remove the glow
+                rect.style.setProperty('--glow-color', 'transparent');
+            }
         }
+        
         if (rect) rect.classList.remove('selected', 'selectable', 'selectable-target');
+        
         if (currentPlayer.isAI) continue;
 
         if (state.gameState.gamePhase === 'ATTACK') {
@@ -145,6 +229,9 @@ export function updateUI() {
             else if (territoryState.ownerId === currentPlayer.id) rect?.classList.add('selectable');
         }
     }
+
+    renderCapitalMarkers(state.gameState.players);
+    ui.nextPhaseBtn.disabled = state.gameState.isBlitzing;
 }
 
 
@@ -160,7 +247,7 @@ export function clearLog() {
     ui.logMessagesEl.innerHTML = '';
 }
 
-// --- MODAL LOGIC ---
+// --- MODAL LOGIC (unchanged from previous version) ---
 export function showAttackModal(sourceId, targetId) {
     state.setAttackContext(sourceId, targetId);
     const attacker = state.getCurrentPlayer();
@@ -174,11 +261,12 @@ export function showAttackModal(sourceId, targetId) {
     document.getElementById('defender-territory').textContent = territoriesData[targetId].name;
     document.getElementById('attacker-armies').textContent = sourceState.armies;
     document.getElementById('defender-armies').textContent = targetState.armies;
-    document.getElementById('attack-options').classList.remove('hidden');
-    document.getElementById('continue-options').classList.add('hidden');
     document.getElementById('attack-result').textContent = '';
     document.getElementById('attacker-dice-container').innerHTML = '';
     document.getElementById('defender-dice-container').innerHTML = '';
+    document.getElementById('continue-options').classList.add('hidden');
+    document.getElementById('blitz-options').classList.add('hidden');
+    document.getElementById('attack-options').classList.remove('hidden');
 
     const attackButtons = document.querySelectorAll('.attack-armies-btn');
     attackButtons.forEach(btn => {
@@ -187,27 +275,45 @@ export function showAttackModal(sourceId, targetId) {
         btn.onclick = () => performAttack(numArmies);
     });
 
+    const maxDice = Math.min(3, sourceState.armies - 1);
+    ui.blitzAttackBtn.disabled = maxDice < 2;
+    ui.blitzAttackBtn.onclick = () => performBlitzAttack();
+
     document.getElementById(`rect-${sourceId}`)?.classList.add('fighting');
     document.getElementById(`rect-${targetId}`)?.classList.add('fighting');
     ui.attackModal.classList.remove('hidden');
 }
 
-export function updateAttackModalAfterBattle() {
+export function updateAttackModalAfterBattle(showContinue = true) {
     const { sourceId, targetId } = state.gameState.attackContext;
     const sourceState = state.gameState.territories[sourceId];
-    
+
     document.getElementById('attack-options').classList.add('hidden');
-    document.getElementById('continue-options').classList.remove('hidden');
-    document.getElementById('continue-attack-btn').disabled = sourceState.armies <= 1;
-    document.getElementById('continue-attack-btn').onclick = () => showAttackModal(sourceId, targetId);
-    document.getElementById('stop-attack-btn').onclick = closeAttackModal;
+    document.getElementById('blitz-options').classList.add('hidden');
+
+    if (showContinue) {
+        document.getElementById('continue-options').classList.remove('hidden');
+        document.getElementById('continue-attack-btn').disabled = sourceState.armies <= 1;
+        document.getElementById('continue-attack-btn').onclick = () => showAttackModal(sourceId, targetId);
+        document.getElementById('stop-attack-btn').onclick = closeAttackModal;
+    }
 }
 
+export function showBlitzUI() {
+    document.getElementById('attack-options').classList.add('hidden');
+    document.getElementById('continue-options').classList.add('hidden');
+    document.getElementById('blitz-options').classList.remove('hidden');
+    document.getElementById('stop-blitz-btn').onclick = () => stopBlitz();
+}
+
+
 export function closeAttackModal() {
-    const { sourceId, targetId } = state.gameState.attackContext;
-    document.getElementById(`rect-${sourceId}`)?.classList.remove('fighting');
-    document.getElementById(`rect-${targetId}`)?.classList.remove('fighting');
+    if (state.gameState.attackContext.sourceId) {
+        document.getElementById(`rect-${state.gameState.attackContext.sourceId}`)?.classList.remove('fighting');
+        document.getElementById(`rect-${state.gameState.attackContext.targetId}`)?.classList.remove('fighting');
+    }
     ui.attackModal.classList.add('hidden');
+    state.setBlitzing(false);
     state.setSelectedTerritory(null);
     updateUI();
 }

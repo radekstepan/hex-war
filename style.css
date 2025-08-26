@@ -14,42 +14,58 @@ body {
 
 /* --- Territory Tiles (Neumorphic/3D Style) --- */
 .territory-rect {
-    stroke: rgba(0, 0, 0, 0.4); /* Darker stroke for better definition */
+    stroke: rgba(0, 0, 0, 0.4);
     stroke-width: 1px;
-    rx: 12px; /* Softer rounded corners */
+    rx: 12px;
     transition: all 0.2s ease-in-out;
     cursor: pointer;
-    /* 3D effect using multiple drop-shadows for highlight and shadow */
+    /* Define a default transparent glow color variable */
+    --glow-color: transparent;
+    /* Combine the base 3D effect with the player's territory glow */
     filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5))
-            drop-shadow(-2px -2px 2px rgba(255,255,255,0.1));
+            drop-shadow(-2px -2px 2px rgba(255,255,255,0.1))
+            drop-shadow(0 0 8px var(--glow-color));
 }
 
 .territory-rect:hover {
     transform: translateY(-2px);
+    /* Enhance the 3D effect and the glow on hover */
     filter: drop-shadow(6px 6px 10px rgba(0,0,0,0.6))
             drop-shadow(-2px -2px 2px rgba(255,255,255,0.1))
-            brightness(1.1);
+            brightness(1.1)
+            drop-shadow(0 0 12px var(--glow-color));
 }
 
-/* "Pressed down" effect for selected state */
+/* "Pressed down" effect for selected state. Overrides player glow with a white selection glow. */
 .territory-rect.selected {
     transform: translateY(1px);
     stroke-width: 3;
     stroke: #fff;
-    filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.7)) /* Inverted shadow */
+    filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.7))
             drop-shadow(0 0 10px #fff);
 }
 
+/* Overrides player glow with a blue "selectable" glow */
 .territory-rect.selectable {
     filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5))
             drop-shadow(-2px -2px 2px rgba(255,255,255,0.1))
-            drop-shadow(0 0 8px #63b3ed); /* Glow for selectable */
+            drop-shadow(0 0 8px #63b3ed);
 }
 
+/* Overrides player glow with a red "target" glow */
 .territory-rect.selectable-target {
      filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5))
             drop-shadow(-2px -2px 2px rgba(255,255,255,0.1))
-            drop-shadow(0 0 10px #f56565); /* Glow for targets */
+            drop-shadow(0 0 10px #f56565);
+}
+
+/* --- Capital Marker --- */
+.capital-marker {
+    fill: #FFD700; /* Gold color */
+    stroke: #000;
+    stroke-width: 1px;
+    pointer-events: none;
+    filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.7));
 }
 
 /* --- UI Panels & Modals (Glassmorphism) --- */
@@ -58,12 +74,10 @@ body {
 #attack-modal > div,
 #fortify-modal > div,
 #winner-modal > div {
-    /* Frosted glass effect */
     background: rgba(35, 43, 63, 0.7);
     backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px); /* For Safari */
-    border-radius: 16px; /* Softer corners */
-    /* Subtle border to lift it off the background */
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
@@ -78,7 +92,6 @@ body {
     -webkit-user-select: none;
     -ms-user-select: none;
     user-select: none;
-    /* Text shadow for pop */
     text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
 }
 
@@ -107,6 +120,14 @@ button:active {
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     filter: brightness(0.95);
 }
+button:disabled, button.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: translateY(0);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    filter: brightness(0.7);
+}
+
 
 /* --- Dice --- */
 .dice {
@@ -119,7 +140,6 @@ button:active {
     font-size: 22px;
     font-weight: bold;
     color: white;
-    /* 3D Dice Effect */
     border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: inset 0 2px 2px rgba(255, 255, 255, 0.2),
                 inset 0 -2px 2px rgba(0, 0, 0, 0.2),
@@ -127,8 +147,8 @@ button:active {
     text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
 }
 
-.attacker-dice { background-image: linear-gradient(to top right, #c53030, #e53e3e); } /* red-700 to red-600 */
-.defender-dice { background-image: linear-gradient(to top right, #2c5282, #3182ce); } /* blue-800 to blue-500 */
+.attacker-dice { background-image: linear-gradient(to top right, #c53030, #e53e3e); }
+.defender-dice { background-image: linear-gradient(to top right, #2c5282, #3182ce); }
 
 /* --- Other Elements --- */
 .balance-bar {
@@ -137,24 +157,34 @@ button:active {
 }
 
 .connection-line {
-    stroke: #4a5568; /* gray-600 */
+    stroke: #4a5568;
     stroke-width: 4;
     stroke-dasharray: 6, 6;
     opacity: 0.8;
 }
 
 /* --- Animations --- */
-@keyframes flash {
-    0% { filter: brightness(1.5) drop-shadow(0 0 10px #fff); }
-    50% { filter: brightness(2.5) drop-shadow(0 0 20px #fff); }
-    100% { filter: brightness(1.0); }
+@keyframes conquered-pulse {
+    0% {
+        filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 6px #fff);
+        transform: scale(1.0);
+    }
+    50% {
+        filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 20px #fff);
+        transform: scale(1.05);
+    }
+    100% {
+        filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 6px #fff);
+        transform: scale(1.0);
+    }
 }
 .conquered {
-    animation: flash 0.8s ease-out;
+    animation: conquered-pulse 0.8s ease-in-out;
 }
 
+/* The fighting glow overrides the player glow for emphasis */
 @keyframes fighting-glow {
-    0% { filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 8px #f6e05e); } /* yellow-300 */
+    0% { filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 8px #f6e05e); }
     50% { filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 16px #f6e05e); }
     100% { filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 8px #f6e05e); }
 }

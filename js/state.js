@@ -13,7 +13,10 @@ export function initGameState() {
             source: null,
             target: null
         },
-        attackContext: {}
+        aiBattleSpeed: 1500, // Default speed in ms
+        isBlitzing: false,
+        attackContext: {},
+        revealedTerritories: new Set()
     };
 }
 
@@ -63,4 +66,8 @@ export function clearFortify() {
 
 export function setAttackContext(sourceId, targetId) {
     gameState.attackContext = { sourceId, targetId };
+}
+
+export function setBlitzing(status) {
+    gameState.isBlitzing = status;
 }

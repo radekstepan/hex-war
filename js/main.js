@@ -8,9 +8,10 @@ window.onload = () => {
 
     ui.startGameBtn.addEventListener('click', () => {
         const numAI = parseInt(ui.aiPlayerSelect.value);
+        const aiSpeed = parseInt(ui.aiSpeedSelect.value);
         ui.startupModal.classList.add('hidden');
         ui.gameContainer.style.display = 'flex';
-        setupGame(numAI);
+        setupGame(numAI, aiSpeed);
     });
 
     ui.restartGameBtn.addEventListener('click', () => {

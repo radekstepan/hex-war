@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Risk - Grid Domination</title>
+    <title>Hex War</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -60,14 +60,22 @@
     <!-- Modals -->
     <div id="startup-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div class="bg-gray-800 p-8 rounded-lg text-center">
-            <h1 class="text-4xl font-bold mb-6">Grid Domination</h1>
+            <h1 class="text-4xl font-bold mb-6">Grid Conquest</h1>
             <div class="mb-6">
                 <label for="ai-player-select" class="block text-lg mb-2">Select Number of AI Opponents:</label>
-                <select id="ai-player-select" class="bg-gray-700 text-white p-2 rounded-lg text-lg">
+                <select id="ai-player-select" class="bg-gray-700 text-white p-2 rounded-lg text-lg w-full">
                     <option value="1">1 AI</option>
                     <option value="2">2 AI</option>
                     <option value="3">3 AI</option>
                     <option value="4">4 AI</option>
+                </select>
+            </div>
+            <div class="mb-8">
+                <label for="ai-speed-select" class="block text-lg mb-2">AI Battle Speed:</label>
+                <select id="ai-speed-select" class="bg-gray-700 text-white p-2 rounded-lg text-lg w-full">
+                    <option value="1500">Normal</option>
+                    <option value="500">Fast</option>
+                    <option value="100">Instant</option>
                 </select>
             </div>
             <button id="start-game-btn" class="px-8 py-4 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-xl">Start Game</button>
@@ -92,11 +100,15 @@
                     <button data-armies="1" class="attack-armies-btn px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg">1 Army</button>
                     <button data-armies="2" class="attack-armies-btn px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg">2 Armies</button>
                     <button data-armies="3" class="attack-armies-btn px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg">3 Armies</button>
+                    <button id="blitz-attack-btn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-bold">Blitz</button>
                 </div>
             </div>
             <div id="continue-options" class="hidden">
                  <button id="continue-attack-btn" class="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg font-bold mr-2">Attack Again</button>
                  <button id="stop-attack-btn" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 rounded-lg font-bold">Stop Attack</button>
+            </div>
+            <div id="blitz-options" class="hidden">
+                <button id="stop-blitz-btn" class="px-8 py-4 bg-purple-800 hover:bg-purple-900 rounded-lg font-bold text-xl animate-pulse">Stop Blitz</button>
             </div>
         </div>
     </div>
