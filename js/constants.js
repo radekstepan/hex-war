@@ -2,6 +2,8 @@ export const TILE_WIDTH = 120;
 export const TILE_HEIGHT = 90;
 export const TILE_GAP = 30;
 export const CAPITAL_REINFORCEMENT_BONUS = 2;
+export const TURNS_TO_ENTRENCH = 2;
+export const ENTRENCHMENT_DEFENSE_BONUS = 1;
 
 export const territoriesData = {
     // North America (Compacted Greenland position)

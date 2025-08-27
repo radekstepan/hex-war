@@ -14,22 +14,22 @@ body {
 
 /* --- Territory Tiles (Neumorphic/3D Style) --- */
 .territory-rect {
-    stroke: rgba(0, 0, 0, 0.4);
-    stroke-width: 1px;
+    stroke: #6b7280; /* gray-500 */
+    stroke-width: 1.5px;
+    stroke-dasharray: 5, 3;
     rx: 12px;
     transition: all 0.2s ease-in-out;
     cursor: pointer;
     /* Define a default transparent glow color variable */
     --glow-color: transparent;
-    /* Combine the base 3D effect with the player's territory glow */
+    /* Base 3D effect without the player's territory glow */
     filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.5))
-            drop-shadow(-2px -2px 2px rgba(255,255,255,0.1))
-            drop-shadow(0 0 8px var(--glow-color));
+            drop-shadow(-2px -2px 2px rgba(255,255,255,0.1));
 }
 
 .territory-rect:hover {
     transform: translateY(-2px);
-    /* Enhance the 3D effect and the glow on hover */
+    /* Enhance the 3D effect and ADD the glow on hover */
     filter: drop-shadow(6px 6px 10px rgba(0,0,0,0.6))
             drop-shadow(-2px -2px 2px rgba(255,255,255,0.1))
             brightness(1.1)
@@ -41,6 +41,7 @@ body {
     transform: translateY(1px);
     stroke-width: 3;
     stroke: #fff;
+    stroke-dasharray: none;
     filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.7))
             drop-shadow(0 0 10px #fff);
 }
@@ -59,13 +60,18 @@ body {
             drop-shadow(0 0 10px #f56565);
 }
 
+/* --- Entrenchment Borders --- */
+.territory-rect.entrenched-fully {
+    stroke: #f7fafc; /* gray-100 */
+    stroke-width: 2.5px;
+    stroke-dasharray: none;
+}
+
 /* --- Capital Marker --- */
-.capital-marker {
+.capital-star {
     fill: #FFD700; /* Gold color */
-    stroke: #000;
-    stroke-width: 1px;
-    pointer-events: none;
-    filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.7));
+    font-weight: 700;
+    font-size: 1.2em;
 }
 
 /* --- UI Panels & Modals (Glassmorphism) --- */
@@ -99,9 +105,39 @@ body {
     text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
 }
 
-.capital-name-label {
-    fill: #FFD700; /* Gold color */
-    font-weight: 700;
+/* --- Mini Map in Attack Modal --- */
+.mini-tile-rect {
+    stroke: rgba(0, 0, 0, 0.4);
+    stroke-width: 1px;
+    rx: 6px;
+    transition: fill 0.4s ease-in-out;
+}
+
+.mini-tile-label {
+    font-size: 7px;
+    font-weight: 600;
+    fill: rgba(255, 255, 255, 0.9);
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.mini-army-label {
+    font-size: 16px;
+    font-weight: bold;
+    fill: white;
+    text-anchor: middle;
+    pointer-events: none;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+
+@keyframes lose-army-flash {
+    0% { filter: brightness(1); }
+    50% { filter: brightness(1.5) drop-shadow(0 0 6px #ef4444); }
+    100% { filter: brightness(1); }
+}
+
+.losing-armies {
+    animation: lose-army-flash 0.3s ease-in-out;
 }
 
 
@@ -132,19 +168,19 @@ button:disabled, button.disabled {
 
 /* --- Dice --- */
 .dice {
-    width: 45px;
-    height: 45px;
-    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
+    font-size: 16px;
     font-weight: bold;
     color: white;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: inset 0 2px 2px rgba(255, 255, 255, 0.2),
-                inset 0 -2px 2px rgba(0, 0, 0, 0.2),
-                2px 2px 5px rgba(0,0,0,0.4);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2),
+                inset 0 -1px 1px rgba(0, 0, 0, 0.2),
+                1px 1px 3px rgba(0,0,0,0.4);
     text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
 }
 

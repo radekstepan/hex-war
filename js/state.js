@@ -16,7 +16,8 @@ export function initGameState() {
         aiBattleSpeed: 1500, // Default speed in ms
         isBlitzing: false,
         attackContext: {},
-        revealedTerritories: new Set()
+        revealedTerritories: new Set(),
+        modifiedTerritories: new Set(),
     };
 }
 
@@ -42,6 +43,7 @@ export function nextPlayer() {
     gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
     gameState.selectedTerritory = null;
     gameState.fortify = { hasFortified: false, source: null, target: null };
+    gameState.modifiedTerritories.clear();
 }
 
 export function setSelectedTerritory(tId) {

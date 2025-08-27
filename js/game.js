@@ -1,13 +1,8 @@
 import * as state from './state.js';
 import * as ui from './ui.js';
-import { PLAYER_COLORS, territoriesData, continentsData, CAPITAL_REINFORCEMENT_BONUS } from './constants.js';
+import { PLAYER_COLORS, territoriesData, continentsData, CAPITAL_REINFORCEMENT_BONUS, TURNS_TO_ENTRENCH, ENTRENCHMENT_DEFENSE_BONUS } from './constants.js';
 import { executeAITurn } from './ai.js';
 
-/**
- * Updates the set of territories visible to the human player.
- * A territory is revealed if it is owned by the human player or adjacent to one.
- * Once revealed, a territory remains visible for the rest of the game.
- */
 function updateRevealedTerritories() {
     const humanPlayer = state.gameState.players.find(p => !p.isAI);
     if (!humanPlayer) return;
@@ -22,11 +17,6 @@ function updateRevealedTerritories() {
     }
 }
 
-/**
- * Checks if the AI player is in a hopeless situation and should surrender.
- * @param {object} aiPlayer - The AI player object to check.
- * @returns {boolean} - True if the AI surrenders, otherwise false.
- */
 function handleAISurrender(aiPlayer) {
     const SURRENDER_DOMINANCE_THRESHOLD = 0.65;
     const AI_WEAKNESS_THRESHOLD = 0.20;
@@ -85,7 +75,7 @@ export function setupGame(numAI, aiSpeed) {
     territoryIds.sort(() => Math.random() - 0.5);
     territoryIds.forEach((tId, index) => {
         const owner = state.gameState.players[index % totalPlayers];
-        territories[tId] = { ownerId: owner.id, armies: 1 };
+        territories[tId] = { ownerId: owner.id, armies: 1, entrenchedTurns: 0 };
     });
 
     state.gameState.players.forEach(player => {
@@ -95,7 +85,6 @@ export function setupGame(numAI, aiSpeed) {
             const randTerritory = myTerritories[Math.floor(Math.random() * myTerritories.length)];
             territories[randTerritory].armies++;
         }
-        // Assign a capital from their starting territories
         if (myTerritories.length > 0) {
             player.capitalTerritory = myTerritories[Math.floor(Math.random() * myTerritories.length)];
         }
@@ -110,19 +99,15 @@ export function setupGame(numAI, aiSpeed) {
 
 function startTurn() {
     if (checkForWinner()) return;
-
     const currentPlayer = state.getCurrentPlayer();
 
-    if (currentPlayer.isAI) {
-        if (handleAISurrender(currentPlayer)) {
-            ui.updateUI();
-            advanceToNextPlayer();
-            return;
-        }
+    if (currentPlayer.isAI && handleAISurrender(currentPlayer)) {
+        ui.updateUI();
+        advanceToNextPlayer();
+        return;
     }
 
     const playerTerritoryCount = Object.values(state.gameState.territories).filter(t => t.ownerId === currentPlayer.id).length;
-
     if (playerTerritoryCount === 0) {
         ui.logMessage(`${currentPlayer.name} has been eliminated.`, 'text-gray-500');
         advanceToNextPlayer();
@@ -162,6 +147,8 @@ export function onTerritoryClick(tId) {
             if (territoryState.ownerId === currentPlayer.id) {
                 territoryState.armies++;
                 currentPlayer.armiesToDeploy--;
+                territoryState.entrenchedTurns = 0;
+                state.gameState.modifiedTerritories.add(tId);
                 if (currentPlayer.armiesToDeploy === 0) changePhase('ATTACK');
                 ui.updateUI();
             }
@@ -183,7 +170,6 @@ export function onTerritoryClick(tId) {
             if (!fortify.source) {
                 if (territoryState.ownerId === currentPlayer.id && territoryState.armies > 1) state.setFortifySource(tId);
             } else {
-                // MODIFIED: Check for adjacency instead of a path
                 if (territoryState.ownerId === currentPlayer.id && tId !== fortify.source && territoriesData[fortify.source].adj.includes(tId)) {
                     state.setFortifyTarget(tId);
                     ui.showFortifyModal(fortify.source, tId);
@@ -201,9 +187,20 @@ export function performAttack(attackerDiceCount) {
     const { sourceId, targetId } = state.gameState.attackContext;
     const sourceState = state.gameState.territories[sourceId];
     const targetState = state.gameState.territories[targetId];
+
+    sourceState.entrenchedTurns = 0;
+    state.gameState.modifiedTerritories.add(sourceId);
+
     const defenderDiceCount = Math.min(targetState.armies, 2);
     const attackerRolls = rollDice(attackerDiceCount).sort((a,b) => b-a);
     const defenderRolls = rollDice(defenderDiceCount).sort((a,b) => b-a);
+    
+    const isEntrenched = targetState.entrenchedTurns >= TURNS_TO_ENTRENCH;
+    if (isEntrenched) {
+        defenderRolls[0] += ENTRENCHMENT_DEFENSE_BONUS;
+        ui.logMessage("Defender is entrenched! +1 to highest die.", "text-cyan-400");
+    }
+
     ui.displayDice('attacker', attackerRolls);
     ui.displayDice('defender', defenderRolls);
     let attackerLosses = 0, defenderLosses = 0;
@@ -213,17 +210,37 @@ export function performAttack(attackerDiceCount) {
     }
     sourceState.armies -= attackerLosses;
     targetState.armies -= defenderLosses;
-    document.getElementById('attack-result').textContent = `Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`;
-    ui.logMessage(`${state.getCurrentPlayer().name} attacks ${territoriesData[targetId].name}. Result: Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`, 'text-yellow-400');
+    
+    // --- UPDATE MODAL UI ---
     document.getElementById('attacker-armies').textContent = sourceState.armies;
     document.getElementById('defender-armies').textContent = targetState.armies;
+    document.getElementById('mini-armies-attacker').textContent = sourceState.armies;
+    document.getElementById('mini-armies-defender').textContent = targetState.armies;
+
+    if (attackerLosses > 0) {
+        const tile = document.getElementById('mini-rect-attacker');
+        tile.classList.add('losing-armies');
+        setTimeout(() => tile.classList.remove('losing-armies'), 300);
+    }
+    if (defenderLosses > 0) {
+        const tile = document.getElementById('mini-rect-defender');
+        tile.classList.add('losing-armies');
+        setTimeout(() => tile.classList.remove('losing-armies'), 300);
+    }
+    // --- END UPDATE MODAL UI ---
+
+    document.getElementById('attack-result').textContent = `Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`;
+    ui.logMessage(`${state.getCurrentPlayer().name} attacks ${territoriesData[targetId].name}. Result: Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`, 'text-yellow-400');
 
     if (targetState.armies <= 0) {
         ui.logMessage(`${state.getCurrentPlayer().name} conquered ${territoriesData[targetId].name}!`, 'text-green-400');
         targetState.ownerId = state.getCurrentPlayer().id;
-        if (!state.getCurrentPlayer().isAI) {
-            updateRevealedTerritories();
-        }
+        targetState.entrenchedTurns = 0;
+        state.gameState.modifiedTerritories.add(targetId);
+        if (!state.getCurrentPlayer().isAI) updateRevealedTerritories();
+        
+        document.getElementById('mini-rect-defender').style.fill = state.getCurrentPlayer().color;
+        
         const rect = document.getElementById(`rect-${targetId}`);
         if (rect) {
             rect.classList.add('conquered');
@@ -256,14 +273,20 @@ export function performBlitzAttack() {
             const targetState = state.gameState.territories[targetId];
 
             if (!state.gameState.isBlitzing || !sourceState || !targetState || sourceState.armies <= 1) {
-                stopBlitz(true);
-                return;
+                stopBlitz(true); return;
             }
+
+            sourceState.entrenchedTurns = 0;
+            state.gameState.modifiedTerritories.add(sourceId);
 
             const attackerDiceCount = Math.min(3, sourceState.armies - 1);
             const defenderDiceCount = Math.min(2, targetState.armies);
             const attackerRolls = rollDice(attackerDiceCount).sort((a, b) => b - a);
             const defenderRolls = rollDice(defenderDiceCount).sort((a, b) => b - a);
+            
+            const isEntrenched = targetState.entrenchedTurns >= TURNS_TO_ENTRENCH;
+            if (isEntrenched) defenderRolls[0] += ENTRENCHMENT_DEFENSE_BONUS;
+
             let attackerLosses = 0, defenderLosses = 0;
             for (let i = 0; i < Math.min(attackerRolls.length, defenderRolls.length); i++) {
                 if (attackerRolls[i] > defenderRolls[i]) defenderLosses++;
@@ -273,17 +296,36 @@ export function performBlitzAttack() {
             sourceState.armies -= attackerLosses;
             targetState.armies -= defenderLosses;
 
+            // --- UPDATE MODAL UI ---
             document.getElementById('attacker-armies').textContent = sourceState.armies;
             document.getElementById('defender-armies').textContent = targetState.armies;
+            document.getElementById('mini-armies-attacker').textContent = sourceState.armies;
+            document.getElementById('mini-armies-defender').textContent = targetState.armies;
+
+            if (attackerLosses > 0) {
+                const tile = document.getElementById('mini-rect-attacker');
+                tile.classList.add('losing-armies');
+                setTimeout(() => tile.classList.remove('losing-armies'), 300);
+            }
+            if (defenderLosses > 0) {
+                const tile = document.getElementById('mini-rect-defender');
+                tile.classList.add('losing-armies');
+                setTimeout(() => tile.classList.remove('losing-armies'), 300);
+            }
+            // --- END UPDATE MODAL UI ---
+
             document.getElementById('attack-result').textContent = `Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`;
             ui.updateUI();
 
             if (targetState.armies <= 0) {
                 ui.logMessage(`${state.getCurrentPlayer().name} conquered ${territoriesData[targetId].name} via blitz!`, 'text-green-400');
                 targetState.ownerId = state.getCurrentPlayer().id;
-                if (!state.getCurrentPlayer().isAI) {
-                    updateRevealedTerritories();
-                }
+                targetState.entrenchedTurns = 0;
+                state.gameState.modifiedTerritories.add(targetId);
+                if (!state.getCurrentPlayer().isAI) updateRevealedTerritories();
+                
+                document.getElementById('mini-rect-defender').style.fill = state.getCurrentPlayer().color;
+
                 const rect = document.getElementById(`rect-${targetId}`);
                 if (rect) {
                     rect.classList.add('conquered');
@@ -321,10 +363,16 @@ export function confirmFortify(amount) {
     const { source, target } = state.gameState.fortify;
     state.gameState.territories[source].armies -= amount;
     state.gameState.territories[target].armies += amount;
+
+    state.gameState.territories[source].entrenchedTurns = 0;
+    state.gameState.territories[target].entrenchedTurns = 0;
+    state.gameState.modifiedTerritories.add(source);
+    state.gameState.modifiedTerritories.add(target);
+
     state.setFortified();
     ui.logMessage(`${state.getCurrentPlayer().name} fortified ${territoriesData[target].name} with ${amount} armies.`);
     ui.closeFortifyModal();
-    advanceToNextPlayer();
+    endTurn();
 }
 
 export function cancelFortify() {
@@ -336,18 +384,28 @@ export function endAttackPhase() {
     changePhase('FORTIFY');
 }
 
+function updateEntrenchment() {
+    const player = state.getCurrentPlayer();
+    for (const tId in state.gameState.territories) {
+        if (state.gameState.territories[tId].ownerId === player.id && !state.gameState.modifiedTerritories.has(tId)) {
+            state.gameState.territories[tId].entrenchedTurns++;
+        }
+    }
+}
+
 export function endTurn() {
-    advanceToNextPlayer();
+    updateEntrenchment();
+    if (state.gameState.fortify.hasFortified) {
+        advanceToNextPlayer();
+    } else {
+        advanceToNextPlayer();
+    }
 }
 
 function calculateReinforcements(playerId) {
     const playerTerritories = Object.keys(state.gameState.territories).filter(tId => state.gameState.territories[tId].ownerId === playerId);
     if (playerTerritories.length === 0) return 0;
-
-    // 1. Territory-based reinforcements
     let reinforcements = Math.max(3, Math.floor(playerTerritories.length / 3));
-
-    // 2. Continent-based reinforcements
     for (const continentName in continentsData) {
         const continentTerritories = Object.keys(territoriesData).filter(tId => territoriesData[tId].continent === continentName);
         const controlsContinent = continentTerritories.every(tId => state.gameState.territories[tId]?.ownerId === playerId);
@@ -357,8 +415,6 @@ function calculateReinforcements(playerId) {
             ui.logMessage(`${state.getPlayerById(playerId).name} controls ${continentName} (+${bonus})`, 'text-green-400');
         }
     }
-
-    // 3. Capital-based reinforcements
     let capitalBonus = 0;
     state.gameState.players.forEach(player => {
         const capitalTId = player.capitalTerritory;
@@ -366,12 +422,10 @@ function calculateReinforcements(playerId) {
             capitalBonus += CAPITAL_REINFORCEMENT_BONUS;
         }
     });
-
     if (capitalBonus > 0) {
         reinforcements += capitalBonus;
         ui.logMessage(`${state.getPlayerById(playerId).name} holds capitals (+${capitalBonus})`, 'text-yellow-400');
     }
-
     return reinforcements;
 }
 
@@ -384,17 +438,10 @@ function checkForWinner() {
         Object.values(state.gameState.territories).some(t => t.ownerId === p.id)
     );
     if (activePlayers.length <= 1) {
-        if (activePlayers.length === 1) {
-            const winner = activePlayers[0];
+        const winner = activePlayers.length === 1 ? activePlayers[0] : null;
+        if (winner) {
             ui.showWinnerModal(winner);
             return true;
-        } else if (Object.values(state.gameState.territories).some(t => t.ownerId !== null)) {
-            const lastOwnerId = Object.values(state.gameState.territories).find(t => t.armies > 0)?.ownerId;
-            if (lastOwnerId) {
-                const winner = state.getPlayerById(lastOwnerId);
-                ui.showWinnerModal(winner);
-                return true;
-            }
         }
     }
     return false;

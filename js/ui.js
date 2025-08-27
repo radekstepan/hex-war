@@ -1,4 +1,4 @@
-import { TILE_WIDTH, TILE_HEIGHT, TILE_GAP, territoriesData, continentsData } from './constants.js';
+import { TILE_WIDTH, TILE_HEIGHT, TILE_GAP, territoriesData, continentsData, TURNS_TO_ENTRENCH } from './constants.js';
 import * as state from './state.js';
 import { onTerritoryClick, performAttack, performBlitzAttack, stopBlitz, confirmFortify, cancelFortify, endAttackPhase, endTurn } from './game.js';
 
@@ -26,6 +26,7 @@ export const ui = {
     blitzAttackBtn: document.getElementById('blitz-attack-btn'),
     blitzOptions: document.getElementById('blitz-options'),
     stopBlitzBtn: document.getElementById('stop-blitz-btn'),
+    miniMapContainer: document.getElementById('mini-map-container'),
 };
 
 // --- MAP RENDERING ---
@@ -39,11 +40,14 @@ function getTerritoryCenter(tId) {
 
 export function renderMap() {
     ui.mapSvg.innerHTML = '';
+    
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const connectionsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const territoriesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     
-    ui.mapSvg.appendChild(connectionsGroup);
-    ui.mapSvg.appendChild(territoriesGroup);
+    g.appendChild(connectionsGroup);
+    g.appendChild(territoriesGroup);
+    ui.mapSvg.appendChild(g);
 
     const drawnConnections = new Set();
     for (const tId in territoriesData) {
@@ -74,12 +78,25 @@ export function renderMap() {
         rect.classList.add('territory-rect');
         rect.addEventListener('click', () => onTerritoryClick(tId));
         territoriesGroup.appendChild(rect);
+
         const nameLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         nameLabel.setAttribute('id', `name-label-${tId}`);
         nameLabel.setAttribute('x', x + TILE_WIDTH / 2); nameLabel.setAttribute('y', y + 20);
         nameLabel.classList.add('territory-name-label');
-        nameLabel.textContent = territory.name;
+        
+        const starTspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+        starTspan.setAttribute('id', `star-${tId}`);
+        starTspan.classList.add('capital-star');
+        starTspan.textContent = '★ ';
+        starTspan.style.display = 'none';
+
+        const nameTspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+        nameTspan.textContent = territory.name;
+
+        nameLabel.appendChild(starTspan);
+        nameLabel.appendChild(nameTspan);
         territoriesGroup.appendChild(nameLabel);
+        
         const armyLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         armyLabel.setAttribute('id', `label-${tId}`);
         armyLabel.setAttribute('x', x + TILE_WIDTH / 2); armyLabel.setAttribute('y', y + TILE_HEIGHT / 2 + 15);
@@ -154,21 +171,20 @@ export function updateUI() {
         const rect = document.getElementById(`rect-${tId}`);
         const label = document.getElementById(`label-${tId}`);
         const nameLabel = document.getElementById(`name-label-${tId}`);
+        const star = document.getElementById(`star-${tId}`);
         const territoryState = state.gameState.territories[tId];
         
         const isRevealed = state.gameState.revealedTerritories.has(tId);
 
-        if (nameLabel) {
-            const isCapital = capitalTerritories.has(tId);
-            nameLabel.textContent = isCapital ? `★ ${territoriesData[tId].name}` : territoriesData[tId].name;
-            nameLabel.classList.toggle('capital-name-label', isCapital);
+        if (star) {
+            star.style.display = capitalTerritories.has(tId) ? 'inline' : 'none';
         }
 
         if (!isRevealed) {
             if (rect) {
-                rect.style.fill = '#2d3748'; // dark grey fog color
+                rect.style.fill = '#2d3748';
                 rect.style.setProperty('--glow-color', 'transparent');
-                rect.classList.remove('selected', 'selectable', 'selectable-target', 'fighting');
+                rect.classList.remove('selected', 'selectable', 'selectable-target', 'fighting', 'entrenched-fully');
             }
             if (label) label.textContent = '???';
             if (nameLabel) nameLabel.style.display = 'none';
@@ -185,6 +201,11 @@ export function updateUI() {
                 rect.style.setProperty('--glow-color', owner.color);
             } else {
                 rect.style.setProperty('--glow-color', 'transparent');
+            }
+
+            rect.classList.remove('entrenched-fully');
+            if (territoryState.entrenchedTurns >= TURNS_TO_ENTRENCH) {
+                rect.classList.add('entrenched-fully');
             }
         }
         
@@ -217,6 +238,39 @@ export function clearLog() {
     }
 }
 
+function createMiniTile(id, x, y, name, armies, color) {
+    const TILE_W = 60;
+    const TILE_H = 40;
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('id', `mini-rect-${id}`);
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', TILE_W);
+    rect.setAttribute('height', TILE_H);
+    rect.setAttribute('fill', color);
+    rect.classList.add('mini-tile-rect');
+
+    const nameLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    nameLabel.setAttribute('x', x + TILE_W / 2);
+    nameLabel.setAttribute('y', y + 10);
+    nameLabel.classList.add('mini-tile-label');
+    nameLabel.textContent = name;
+
+    const armyLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    armyLabel.setAttribute('id', `mini-armies-${id}`);
+    armyLabel.setAttribute('x', x + TILE_W / 2);
+    armyLabel.setAttribute('y', y + 30);
+    armyLabel.classList.add('mini-army-label');
+    armyLabel.textContent = armies;
+
+    g.appendChild(rect);
+    g.appendChild(nameLabel);
+    g.appendChild(armyLabel);
+    return g;
+}
+
 // --- MODAL LOGIC ---
 export function showAttackModal(sourceId, targetId) {
     state.setAttackContext(sourceId, targetId);
@@ -231,6 +285,18 @@ export function showAttackModal(sourceId, targetId) {
     document.getElementById('defender-territory').textContent = territoriesData[targetId].name;
     document.getElementById('attacker-armies').textContent = sourceState.armies;
     document.getElementById('defender-armies').textContent = targetState.armies;
+
+    // Mini Map
+    ui.miniMapContainer.innerHTML = '';
+    const miniSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    miniSvg.setAttribute('viewBox', '0 0 135 50');
+    const attackerTile = createMiniTile('attacker', 5, 5, territoriesData[sourceId].name, sourceState.armies, attacker.color);
+    const defenderTile = createMiniTile('defender', 70, 5, territoriesData[targetId].name, targetState.armies, defender.color);
+    miniSvg.appendChild(attackerTile);
+    miniSvg.appendChild(defenderTile);
+    ui.miniMapContainer.appendChild(miniSvg);
+
+
     document.getElementById('attack-result').textContent = '';
     document.getElementById('attacker-dice-container').innerHTML = '';
     document.getElementById('defender-dice-container').innerHTML = '';
@@ -238,11 +304,12 @@ export function showAttackModal(sourceId, targetId) {
     document.getElementById('blitz-options').classList.add('hidden');
     document.getElementById('attack-options').classList.remove('hidden');
 
-    const attackButtons = document.querySelectorAll('.attack-armies-btn');
+    const attackButtons = document.querySelectorAll('.attack-dice-btn');
     attackButtons.forEach(btn => {
-        const numArmies = parseInt(btn.dataset.armies);
-        btn.disabled = sourceState.armies <= numArmies;
-        btn.onclick = () => performAttack(numArmies);
+        const numDice = parseInt(btn.dataset.dice);
+        // You need numDice + 1 armies to attack with numDice
+        btn.disabled = sourceState.armies <= numDice;
+        btn.onclick = () => performAttack(numDice);
     });
 
     const maxDice = Math.min(3, sourceState.armies - 1);
@@ -335,11 +402,7 @@ let currentWheelListener, currentPointerDownListener, currentPointerMoveListener
 
 const updateTransform = () => {
     if (ui.mapSvg) {
-        // We now manipulate a group inside the SVG, not the SVG itself.
-        const g = ui.mapSvg.querySelector('g');
-        if (g) {
-            g.setAttribute('transform', `translate(${pan.x}, ${pan.y}) scale(${scale})`);
-        }
+        ui.mapSvg.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
     }
 };
 
@@ -348,12 +411,10 @@ export function setupPanZoom() {
     let isPanning = false;
     let startPoint = { x: 0, y: 0 };
     
-    // Reset pan and zoom state for a new game
     scale = 1;
     pan = { x: 0, y: 0 };
-    // This transform will now apply to the group, not the SVG, so we reset it.
-    if (ui.mapSvg.querySelector('g')) {
-         ui.mapSvg.querySelector('g').setAttribute('transform', '');
+    if (ui.mapSvg) {
+         ui.mapSvg.style.transform = '';
     }
 
     const onWheel = e => {
@@ -365,7 +426,6 @@ export function setupPanZoom() {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // Adjust pan based on mouse position
         pan.x = mouseX - (mouseX - pan.x) * (newScale / scale);
         pan.y = mouseY - (mouseY - pan.y) * (newScale / scale);
 
@@ -393,19 +453,16 @@ export function setupPanZoom() {
         mapContainer.style.cursor = 'grab';
     };
 
-    // Clear previous listeners if they exist to prevent duplicates on restart
     if (currentWheelListener) mapContainer.removeEventListener('wheel', currentWheelListener);
     if (currentPointerDownListener) mapContainer.removeEventListener('pointerdown', currentPointerDownListener);
     if (currentPointerMoveListener) window.removeEventListener('pointermove', currentPointerMoveListener);
     if (currentPointerUpListener) window.removeEventListener('pointerup', currentPointerUpListener);
 
-    // Store the new listeners
     currentWheelListener = onWheel;
     currentPointerDownListener = onPointerDown;
     currentPointerMoveListener = onPointerMove;
     currentPointerUpListener = onPointerUp;
 
-    // Add new listeners
     mapContainer.addEventListener('wheel', currentWheelListener);
     mapContainer.addEventListener('pointerdown', currentPointerDownListener);
     window.addEventListener('pointermove', currentPointerMoveListener);

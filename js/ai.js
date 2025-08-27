@@ -1,6 +1,6 @@
 import * as state from './state.js';
 import * as ui from './ui.js';
-import { territoriesData } from './constants.js';
+import { territoriesData, TURNS_TO_ENTRENCH } from './constants.js';
 import { changePhase, rollDice, endTurn } from './game.js';
 
 function executeAIReinforce() {
@@ -21,6 +21,8 @@ function executeAIReinforce() {
 
     ui.logMessage(`AI reinforces ${territoriesData[territoryToReinforce].name} with ${player.armiesToDeploy} armies.`);
     state.gameState.territories[territoryToReinforce].armies += player.armiesToDeploy;
+    state.gameState.territories[territoryToReinforce].entrenchedTurns = 0;
+    state.gameState.modifiedTerritories.add(territoryToReinforce);
     player.armiesToDeploy = 0;
     ui.updateUI();
 }
@@ -38,7 +40,11 @@ function executeAIAttacks(callback) {
         }
     }
 
-    const goodAttacks = possibleAttacks.filter(attack => state.gameState.territories[attack.from].armies > state.gameState.territories[attack.to].armies);
+    const goodAttacks = possibleAttacks.filter(attack => {
+        const isEntrenched = state.gameState.territories[attack.to].entrenchedTurns >= TURNS_TO_ENTRENCH;
+        const defenseBonus = isEntrenched ? 2 : 0; // AI considers entrenchment worth ~2 armies
+        return state.gameState.territories[attack.from].armies > (state.gameState.territories[attack.to].armies + defenseBonus);
+    });
 
     if (goodAttacks.length === 0 || Math.random() > 0.8) {
         ui.logMessage("AI concludes its attack phase.");
@@ -49,6 +55,9 @@ function executeAIAttacks(callback) {
     const attack = goodAttacks.sort((a, b) => state.gameState.territories[b.from].armies - state.gameState.territories[a.from].armies)[0];
 
     ui.logMessage(`AI attacks ${territoriesData[attack.to].name} from ${territoriesData[attack.from].name}.`);
+    state.gameState.territories[attack.from].entrenchedTurns = 0;
+    state.gameState.modifiedTerritories.add(attack.from);
+
     const fromRect = document.getElementById(`rect-${attack.from}`);
     const toRect = document.getElementById(`rect-${attack.to}`);
     fromRect?.classList.add('fighting');
@@ -69,6 +78,13 @@ function executeAIAttacks(callback) {
         const defenderDice = Math.min(2, defenderState.armies);
         const attackerRolls = rollDice(attackerDice).sort((a, b) => b - a);
         const defenderRolls = rollDice(defenderDice).sort((a, b) => b - a);
+        
+        const isEntrenched = defenderState.entrenchedTurns >= TURNS_TO_ENTRENCH;
+        if (isEntrenched) {
+            defenderRolls[0] += 1;
+            ui.logMessage("Defender is entrenched! +1 to highest die.", "text-cyan-400");
+        }
+
         let attackerLosses = 0, defenderLosses = 0;
 
         for (let i = 0; i < Math.min(attackerRolls.length, defenderRolls.length); i++) {
@@ -82,6 +98,8 @@ function executeAIAttacks(callback) {
         if (defenderState.armies <= 0) {
             ui.logMessage(`AI conquered ${territoriesData[attack.to].name}!`, 'text-green-400');
             defenderState.ownerId = player.id;
+            defenderState.entrenchedTurns = 0;
+            state.gameState.modifiedTerritories.add(attack.to);
             toRect?.classList.add('conquered');
             setTimeout(() => toRect?.classList.remove('conquered'), 800);
             const armiesToMove = Math.max(1, attackerDice - attackerLosses);
@@ -103,25 +121,15 @@ function executeAIFortify() {
     const myTerritories = Object.keys(state.gameState.territories).filter(tId => state.gameState.territories[tId].ownerId === player.id);
     const possibleMoves = [];
 
-    // Helper to check if a territory is on the border
-    const isBorderTerritory = (tId) => {
-        return territoriesData[tId].adj.some(adjId => state.gameState.territories[adjId].ownerId !== player.id);
-    };
+    const isBorderTerritory = (tId) => territoriesData[tId].adj.some(adjId => state.gameState.territories[adjId].ownerId !== player.id);
 
     myTerritories.forEach(fromId => {
-        // Must have armies to move
         if (state.gameState.territories[fromId].armies > 1) {
             const isFromBorder = isBorderTerritory(fromId);
-
-            // Find adjacent friendly territories
             territoriesData[fromId].adj.forEach(toId => {
-                // Check if 'to' is a friendly territory
                 if (state.gameState.territories[toId].ownerId === player.id) {
                     const isToBorder = isBorderTerritory(toId);
-                    
-                    // The best moves are from safe zones to the frontline
                     if (!isFromBorder && isToBorder) {
-                        // Move all but one army
                         const armiesToMove = state.gameState.territories[fromId].armies - 1;
                         possibleMoves.push({ from: fromId, to: toId, armies: armiesToMove });
                     }
@@ -131,10 +139,15 @@ function executeAIFortify() {
     });
 
     if (possibleMoves.length > 0) {
-        // Find the move that transfers the most armies
         const bestMove = possibleMoves.sort((a,b) => b.armies - a.armies)[0];
         state.gameState.territories[bestMove.from].armies -= bestMove.armies;
         state.gameState.territories[bestMove.to].armies += bestMove.armies;
+        
+        state.gameState.territories[bestMove.from].entrenchedTurns = 0;
+        state.gameState.territories[bestMove.to].entrenchedTurns = 0;
+        state.gameState.modifiedTerritories.add(bestMove.from);
+        state.gameState.modifiedTerritories.add(bestMove.to);
+
         ui.logMessage(`AI fortified ${territoriesData[bestMove.to].name} from ${territoriesData[bestMove.from].name} with ${bestMove.armies} armies.`);
         ui.updateUI();
     } else {
@@ -148,15 +161,12 @@ export function executeAITurn() {
 
     setTimeout(() => {
         executeAIReinforce();
-
         setTimeout(() => {
             changePhase('ATTACK');
             executeAIAttacks(() => {
-
                 setTimeout(() => {
                     changePhase('FORTIFY');
                     executeAIFortify();
-
                     setTimeout(() => {
                         endTurn();
                     }, phaseDelay);
