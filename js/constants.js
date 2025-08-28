@@ -7,6 +7,13 @@ export const ENTRENCHMENT_DEFENSE_BONUS = 1;
 
 export const AI_DIFFICULTIES = ['Easy', 'Normal', 'Hard'];
 
+export const AI_NAMES = [
+    'Napoleon', 'Caesar', 'Alexander', 'Genghis Khan', 'Hannibal', 
+    'Saladin', 'Sun Tzu', 'Washington', 'Boudica', 'Charlemagne',
+    'Ramses II', 'Ashurbanipal', 'Cyrus', 'Pericles', 'Scipio',
+    'Attila', 'William I', 'Frederick II', 'Peter I', 'Catherine II'
+];
+
 export const territoriesData = {
     // North America
     'alaska': { name: 'Alaska', continent: 'North America', gridX: 0, gridY: 0, adj: ['kamchatka', 'northwest-territory', 'alberta'] },
@@ -75,3 +82,14 @@ export const PLAYER_COLORS = [
     '#805ad5', // Purple
     '#dd6b20' // Orange
 ];
+
+export const CARD_SUITS = ['hearts', 'diamonds', 'clubs', 'spades'];
+export const CARD_RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+
+export const POKER_HANDS = {
+    STRAIGHT_FLUSH: { name: 'Straight Flush', bonus: 4 },
+    THREE_OF_A_KIND: { name: 'Three of a Kind', bonus: 3 },
+    STRAIGHT: { name: 'Straight', bonus: 2 },
+    FLUSH: { name: 'Flush', bonus: 2 },
+    PAIR: { name: 'Pair', bonus: 1 },
+};

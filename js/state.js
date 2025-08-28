@@ -6,7 +6,9 @@ export function initGameState() {
         players: [],
         territories: {},
         currentPlayerIndex: 0,
-        gamePhase: 'SETUP', // SETUP, REINFORCE, ATTACK, FORTIFY
+        gamePhase: 'SETUP', // SETUP, CARD_PLAY_ROUND, REINFORCE, ATTACK, FORTIFY
+        deck: [],
+        discardPile: [],
         selectedTerritory: null,
         fortify: {
             hasFortified: false,
@@ -72,4 +74,24 @@ export function setAttackContext(sourceId, targetId) {
 
 export function setBlitzing(status) {
     gameState.isBlitzing = status;
+}
+
+export function setDeck(deck) {
+    gameState.deck = deck;
+    gameState.discardPile = [];
+}
+
+export function drawCard() {
+    if (gameState.deck.length === 0) {
+        console.warn("Deck is empty! The game should reshuffle the discard pile.");
+        return null;
+    }
+    return gameState.deck.pop();
+}
+
+export function addToDiscardPile(cards) {
+    if (!Array.isArray(cards)) {
+        cards = [cards];
+    }
+    gameState.discardPile.push(...cards);
 }

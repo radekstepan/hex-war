@@ -1,7 +1,12 @@
 import * as state from './state.js';
 import * as ui from './ui.js';
 import { PLAYER_COLORS, territoriesData, continentsData, CAPITAL_REINFORCEMENT_BONUS, TURNS_TO_ENTRENCH, ENTRENCHMENT_DEFENSE_BONUS } from './constants.js';
-import { executeAITurn } from './ai.js';
+import { executeAICardPlay, executeAIMainTurn } from './ai.js';
+import { createDeck, shuffleDeck, evaluateHand } from './cards.js';
+
+function isPlayerActive(playerId) {
+    return Object.values(state.gameState.territories).some(t => t.ownerId === playerId);
+}
 
 function updateRevealedTerritories() {
     const humanPlayer = state.gameState.players.find(p => !p.isAI);
@@ -54,10 +59,89 @@ function handleAISurrender(aiPlayer) {
     return false;
 }
 
-// --- GAME SETUP & FLOW ---
+function ensureDeckHasCards() {
+    if (state.gameState.deck.length === 0) {
+        if (state.gameState.discardPile.length === 0) {
+            console.error("Deck and discard pile are both empty! Cannot draw cards.");
+            return false;
+        }
+        ui.logMessage("Deck empty. Reshuffling discard pile...");
+        const newDeck = state.gameState.discardPile;
+        state.gameState.discardPile = [];
+        shuffleDeck(newDeck);
+        state.gameState.deck = newDeck;
+    }
+    return true;
+}
+
+function dealCardsToPlayer(player, count) {
+    for (let i = 0; i < count; i++) {
+        if (!ensureDeckHasCards()) break;
+        const card = state.drawCard();
+        if (card) {
+            player.hand.push(card);
+        } else {
+            console.error("Failed to draw a card even after ensuring deck has cards.");
+            break;
+        }
+    }
+}
+
+// --- REVISED AND CORRECTED GAME FLOW ---
+
+function startCardPlayRound() {
+    if (checkForWinner()) return;
+
+    state.gameState.players.forEach(p => {
+        p.attackBonus = null;
+        p.playedHand = [];
+        
+        // Handle eliminated players before the round starts
+        if (!isPlayerActive(p.id)) {
+            if (p.hand.length > 0) {
+                state.addToDiscardPile(p.hand);
+                p.hand = [];
+                ui.logMessage(`${p.name} was eliminated; their hand was discarded.`, 'text-gray-500');
+            }
+            p.hasPlayedCardsThisRound = true;
+        } else {
+            p.hasPlayedCardsThisRound = false;
+        }
+    });
+    
+    state.setGamePhase('CARD_PLAY_ROUND');
+    handleNextCardPlayer();
+}
+
+function handleNextCardPlayer() {
+    const nextPlayerIndex = state.gameState.players.findIndex(p => !p.hasPlayedCardsThisRound);
+
+    if (nextPlayerIndex === -1) {
+        startMainRound();
+        return;
+    }
+    
+    state.gameState.currentPlayerIndex = nextPlayerIndex;
+    const currentPlayer = state.getCurrentPlayer();
+    ui.updateUI();
+
+    if (currentPlayer.isAI) {
+        executeAICardPlay(() => {
+            currentPlayer.hasPlayedCardsThisRound = true;
+            handleNextCardPlayer();
+        });
+    }
+    // For human player, the game will now wait for input from the UI.
+}
+
+function startMainRound() {
+    state.gameState.currentPlayerIndex = 0;
+    startMainTurn();
+}
+
 export function setupGame(playerConfigs) {
     state.initGameState();
-    state.gameState.aiBattleSpeed = 500; // Hardcode to "Fast"
+    state.gameState.aiBattleSpeed = 500;
 
     const totalPlayers = playerConfigs.length;
     const startingArmiesMap = { 2: 40, 3: 35, 4: 30, 5: 25 };
@@ -68,10 +152,22 @@ export function setupGame(playerConfigs) {
         name: config.name,
         color: config.color,
         isAI: config.isAI,
-        difficulty: config.difficulty, // Will be undefined for human
+        difficulty: config.difficulty,
         capitalTerritory: null,
+        hand: [],
+        attackBonus: null,
+        playedHand: [],
+        hasPlayedCardsThisRound: false,
     }));
     state.setPlayers(players);
+
+    const deck = createDeck();
+    shuffleDeck(deck);
+    state.setDeck(deck);
+
+    state.gameState.players.forEach(player => {
+        dealCardsToPlayer(player, 5);
+    });
 
     const territories = {};
     const territoryIds = Object.keys(territoriesData);
@@ -96,24 +192,22 @@ export function setupGame(playerConfigs) {
     updateRevealedTerritories();
 
     ui.clearLog();
-    ui.logMessage('Game started! Your turn.');
-    startTurn();
+    ui.logMessage('Game started! Card Play phase.');
+    startCardPlayRound();
 }
 
-function startTurn() {
+function startMainTurn() {
     if (checkForWinner()) return;
     const currentPlayer = state.getCurrentPlayer();
-
-    if (currentPlayer.isAI && handleAISurrender(currentPlayer)) {
-        ui.updateUI();
-        advanceToNextPlayer();
+    
+    if (!isPlayerActive(currentPlayer.id)) {
+        endTurn();
         return;
     }
 
-    const playerTerritoryCount = Object.values(state.gameState.territories).filter(t => t.ownerId === currentPlayer.id).length;
-    if (playerTerritoryCount === 0) {
-        ui.logMessage(`${currentPlayer.name} has been eliminated.`, 'text-gray-500');
-        advanceToNextPlayer();
+    if (currentPlayer.isAI && handleAISurrender(currentPlayer)) {
+        ui.updateUI();
+        endTurn();
         return;
     }
 
@@ -122,10 +216,16 @@ function startTurn() {
     ui.logMessage(`${currentPlayer.name} gets ${reinforcements} reinforcements.`);
 
     if (currentPlayer.isAI) {
-        setTimeout(executeAITurn, 1000);
+        executeAIMainTurn();
     } else {
         changePhase('REINFORCE');
     }
+}
+
+export function proceedToReinforce() { // Called by "Skip" button
+    const player = state.getCurrentPlayer();
+    player.hasPlayedCardsThisRound = true;
+    handleNextCardPlayer();
 }
 
 export function changePhase(newPhase) {
@@ -133,12 +233,6 @@ export function changePhase(newPhase) {
     ui.updateUI();
 }
 
-function advanceToNextPlayer() {
-    state.nextPlayer();
-    startTurn();
-}
-
-// --- PLAYER ACTIONS ---
 export function onTerritoryClick(tId) {
     if (state.getCurrentPlayer().isAI || state.gameState.isBlitzing) return;
     const { gamePhase, selectedTerritory, fortify } = state.gameState;
@@ -186,8 +280,42 @@ export function onTerritoryClick(tId) {
     }
 }
 
+export function playSelectedCards(cardIndices) {
+    const player = state.getCurrentPlayer();
+    const selectedCards = cardIndices.map(i => player.hand[i]);
+    
+    const handBonus = evaluateHand(selectedCards);
+    if (handBonus) {
+        player.attackBonus = handBonus;
+        player.playedHand = [...selectedCards];
+        ui.logMessage(`${player.name} played a ${handBonus.name} for +${handBonus.bonus} attack bonus!`, 'text-yellow-300');
+    }
+
+    state.addToDiscardPile(selectedCards);
+    cardIndices.sort((a,b) => b-a).forEach(index => player.hand.splice(index, 1));
+    dealCardsToPlayer(player, cardIndices.length);
+    
+    player.hasPlayedCardsThisRound = true;
+    handleNextCardPlayer();
+}
+
+export function discardCard(cardIndex) {
+    const player = state.getCurrentPlayer();
+    const cardToDiscard = player.hand[cardIndex];
+
+    state.addToDiscardPile(cardToDiscard);
+    player.hand.splice(cardIndex, 1);
+    dealCardsToPlayer(player, 1);
+
+    ui.logMessage(`${player.name} discarded a card.`);
+    
+    player.hasPlayedCardsThisRound = true;
+    handleNextCardPlayer();
+}
+
 export function performAttack(attackerDiceCount) {
     const { sourceId, targetId } = state.gameState.attackContext;
+    const attackerPlayer = state.getCurrentPlayer();
     const sourceState = state.gameState.territories[sourceId];
     const targetState = state.gameState.territories[targetId];
 
@@ -197,6 +325,12 @@ export function performAttack(attackerDiceCount) {
     const defenderDiceCount = Math.min(targetState.armies, 2);
     const attackerRolls = rollDice(attackerDiceCount).sort((a,b) => b-a);
     const defenderRolls = rollDice(defenderDiceCount).sort((a,b) => b-a);
+
+    const attackerBonus = attackerPlayer.attackBonus;
+    if (attackerBonus) {
+        attackerRolls[0] += attackerBonus.bonus;
+        ui.logMessage(`${attackerPlayer.name}'s ${attackerBonus.name} bonus adds +${attackerBonus.bonus} to their attack!`, "text-yellow-300");
+    }
     
     const isEntrenched = targetState.entrenchedTurns >= TURNS_TO_ENTRENCH;
     if (isEntrenched) {
@@ -231,16 +365,16 @@ export function performAttack(attackerDiceCount) {
     }
 
     document.getElementById('attack-result').textContent = `Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`;
-    ui.logMessage(`${state.getCurrentPlayer().name} attacks ${territoriesData[targetId].name}. Result: Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`, 'text-yellow-400');
+    ui.logMessage(`${attackerPlayer.name} attacks ${territoriesData[targetId].name}. Result: Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`, 'text-yellow-400');
 
     if (targetState.armies <= 0) {
-        ui.logMessage(`${state.getCurrentPlayer().name} conquered ${territoriesData[targetId].name}!`, 'text-green-400');
-        targetState.ownerId = state.getCurrentPlayer().id;
+        ui.logMessage(`${attackerPlayer.name} conquered ${territoriesData[targetId].name}!`, 'text-green-400');
+        targetState.ownerId = attackerPlayer.id;
         targetState.entrenchedTurns = 0;
         state.gameState.modifiedTerritories.add(targetId);
-        if (!state.getCurrentPlayer().isAI) updateRevealedTerritories();
+        if (!attackerPlayer.isAI) updateRevealedTerritories();
         
-        document.getElementById('mini-rect-defender').style.fill = state.getCurrentPlayer().color;
+        document.getElementById('mini-rect-defender').style.fill = attackerPlayer.color;
         
         const rect = document.getElementById(`rect-${targetId}`);
         if (rect) {
@@ -274,6 +408,7 @@ export function performBlitzAttack() {
     const blitzLoop = () => {
         try {
             const { sourceId, targetId } = state.gameState.attackContext;
+            const attackerPlayer = state.getCurrentPlayer();
             const sourceState = state.gameState.territories[sourceId];
             const targetState = state.gameState.territories[targetId];
 
@@ -289,6 +424,11 @@ export function performBlitzAttack() {
             const attackerRolls = rollDice(attackerDiceCount).sort((a, b) => b - a);
             const defenderRolls = rollDice(defenderDiceCount).sort((a, b) => b - a);
             
+            const attackerBonus = attackerPlayer.attackBonus;
+            if (attackerBonus) {
+                attackerRolls[0] += attackerBonus.bonus;
+            }
+
             const isEntrenched = targetState.entrenchedTurns >= TURNS_TO_ENTRENCH;
             if (isEntrenched) defenderRolls[0] += ENTRENCHMENT_DEFENSE_BONUS;
 
@@ -321,13 +461,13 @@ export function performBlitzAttack() {
             ui.updateUI();
 
             if (targetState.armies <= 0) {
-                ui.logMessage(`${state.getCurrentPlayer().name} conquered ${territoriesData[targetId].name} via blitz!`, 'text-green-400');
-                targetState.ownerId = state.getCurrentPlayer().id;
+                ui.logMessage(`${attackerPlayer.name} conquered ${territoriesData[targetId].name} via blitz!`, 'text-green-400');
+                targetState.ownerId = attackerPlayer.id;
                 targetState.entrenchedTurns = 0;
                 state.gameState.modifiedTerritories.add(targetId);
-                if (!state.getCurrentPlayer().isAI) updateRevealedTerritories();
+                if (!attackerPlayer.isAI) updateRevealedTerritories();
                 
-                document.getElementById('mini-rect-defender').style.fill = state.getCurrentPlayer().color;
+                document.getElementById('mini-rect-defender').style.fill = attackerPlayer.color;
 
                 const rect = document.getElementById(`rect-${targetId}`);
                 if (rect) {
@@ -400,14 +540,17 @@ function updateEntrenchment() {
 
 export function endTurn() {
     updateEntrenchment();
-    if (state.gameState.fortify.hasFortified) {
-        advanceToNextPlayer();
+    const wasLastPlayer = state.gameState.currentPlayerIndex === state.gameState.players.length - 1;
+    
+    if (wasLastPlayer) {
+        startCardPlayRound();
     } else {
-        advanceToNextPlayer();
+        state.nextPlayer();
+        startMainTurn();
     }
 }
 
-function calculateReinforcements(playerId) {
+export function calculateReinforcements(playerId) {
     const playerTerritories = Object.keys(state.gameState.territories).filter(tId => state.gameState.territories[tId].ownerId === playerId);
     if (playerTerritories.length === 0) return 0;
     let reinforcements = Math.max(3, Math.floor(playerTerritories.length / 3));
@@ -439,9 +582,7 @@ export function rollDice(count) {
 }
 
 function checkForWinner() {
-    const activePlayers = state.gameState.players.filter(p =>
-        Object.values(state.gameState.territories).some(t => t.ownerId === p.id)
-    );
+    const activePlayers = state.gameState.players.filter(p => isPlayerActive(p.id));
     if (activePlayers.length <= 1) {
         const winner = activePlayers.length === 1 ? activePlayers[0] : null;
         if (winner) {

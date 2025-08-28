@@ -1,10 +1,28 @@
 import * as state from './state.js';
 import * as ui from './ui.js';
 import { territoriesData, TURNS_TO_ENTRENCH } from './constants.js';
-import { changePhase, rollDice, endTurn } from './game.js';
+import { changePhase, rollDice, endTurn, calculateReinforcements } from './game.js';
+import { evaluateHand, shuffleDeck } from './cards.js';
+
+function aiDrawCards(player, count) {
+    for (let i = 0; i < count; i++) {
+        if (state.gameState.deck.length === 0) {
+            if (state.gameState.discardPile.length === 0) {
+                console.error("AI cannot draw card, no cards left anywhere.");
+                break; 
+            }
+            state.gameState.deck = state.gameState.discardPile;
+            state.gameState.discardPile = [];
+            shuffleDeck(state.gameState.deck);
+        }
+        const card = state.drawCard();
+        if (card) player.hand.push(card);
+    }
+}
 
 function executeAIReinforce() {
     const player = state.getCurrentPlayer();
+    if (player.armiesToDeploy === 0) return;
     const myTerritories = Object.keys(state.gameState.territories).filter(tId => state.gameState.territories[tId].ownerId === player.id);
 
     if (myTerritories.length === 0) {
@@ -39,11 +57,11 @@ function executeAIAttacks(callback) {
             });
         }
     }
-
+    const attackBonusValue = player.attackBonus ? player.attackBonus.bonus : 0;
     const goodAttacks = possibleAttacks.filter(attack => {
         const isEntrenched = state.gameState.territories[attack.to].entrenchedTurns >= TURNS_TO_ENTRENCH;
         const defenseBonus = isEntrenched ? 2 : 0; // AI considers entrenchment worth ~2 armies
-        return state.gameState.territories[attack.from].armies > (state.gameState.territories[attack.to].armies + defenseBonus);
+        return (state.gameState.territories[attack.from].armies + attackBonusValue / 2) > (state.gameState.territories[attack.to].armies + defenseBonus);
     });
     
     const attackProbability = { 'Easy': 0.5, 'Normal': 0.8, 'Hard': 1.0 };
@@ -82,6 +100,10 @@ function executeAIAttacks(callback) {
         const attackerRolls = rollDice(attackerDice).sort((a, b) => b - a);
         const defenderRolls = rollDice(defenderDice).sort((a, b) => b - a);
         
+        if (player.attackBonus) {
+            attackerRolls[0] += player.attackBonus.bonus;
+        }
+
         const isEntrenched = defenderState.entrenchedTurns >= TURNS_TO_ENTRENCH;
         if (isEntrenched) {
             defenderRolls[0] += 1;
@@ -160,23 +182,67 @@ function executeAIFortify() {
     }
 }
 
-export function executeAITurn() {
-    const phaseDelay = Math.max(250, state.gameState.aiBattleSpeed / 2);
-    changePhase('REINFORCE');
+export function executeAICardPlay(callback) {
+    const player = state.getCurrentPlayer();
+    const hand = player.hand;
+    let bestPlay = { combination: [], handInfo: null, score: -1 };
+
+    if (hand.length >= 3) {
+        for (let i = 0; i < hand.length - 2; i++) {
+            for (let j = i + 1; j < hand.length - 1; j++) {
+                for (let k = j + 1; k < hand.length; k++) {
+                    const combination = [hand[i], hand[j], hand[k]];
+                    const handInfo = evaluateHand(combination);
+                    if (handInfo) {
+                        const score = handInfo.bonus;
+                        if (score > bestPlay.score) {
+                            bestPlay = { combination, handInfo, score, indices: [i, j, k] };
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     setTimeout(() => {
-        executeAIReinforce();
-        setTimeout(() => {
-            changePhase('ATTACK');
-            executeAIAttacks(() => {
+        if (bestPlay.handInfo) {
+            player.attackBonus = bestPlay.handInfo;
+            player.playedHand = [...bestPlay.combination];
+            ui.logMessage(`AI ${player.name} played a ${bestPlay.handInfo.name} for +${bestPlay.handInfo.bonus} attack bonus!`, 'text-yellow-300');
+            state.addToDiscardPile(bestPlay.combination);
+            bestPlay.indices.sort((a, b) => b - a).forEach(index => player.hand.splice(index, 1));
+            aiDrawCards(player, 3);
+        } else {
+            if (player.hand.length > 0) {
+                const cardToDiscardIndex = Math.floor(Math.random() * player.hand.length);
+                const cardToDiscard = player.hand[cardToDiscardIndex];
+                state.addToDiscardPile(cardToDiscard);
+                player.hand.splice(cardToDiscardIndex, 1);
+                ui.logMessage(`AI ${player.name} discarded a card.`);
+                aiDrawCards(player, 1);
+            }
+        }
+        ui.updateUI();
+        callback();
+    }, 1000);
+}
+
+export function executeAIMainTurn() {
+    const phaseDelay = Math.max(250, state.gameState.aiBattleSpeed / 2);
+    
+    changePhase('REINFORCE');
+    executeAIReinforce();
+
+    setTimeout(() => {
+        changePhase('ATTACK');
+        executeAIAttacks(() => {
+            setTimeout(() => {
+                changePhase('FORTIFY');
+                executeAIFortify();
                 setTimeout(() => {
-                    changePhase('FORTIFY');
-                    executeAIFortify();
-                    setTimeout(() => {
-                        endTurn();
-                    }, phaseDelay);
+                    endTurn();
                 }, phaseDelay);
-            });
-        }, phaseDelay);
+            }, phaseDelay);
+        });
     }, phaseDelay);
 }

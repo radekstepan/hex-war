@@ -49,12 +49,34 @@
             </div>
         </div>
 
+        <!-- Left Bonus Bar -->
+        <div id="left-bonus-bar" class="absolute left-2 top-1/2 -translate-y-1/2 z-10">
+            <div id="active-bonuses-list" class="flex flex-col space-y-2">
+                <!-- Active bonuses will be injected here -->
+            </div>
+        </div>
+
 
         <!-- Map -->
         <div id="map-container" class="relative w-full h-full flex items-center justify-center">
              <svg id="map-svg" viewBox="-50 -50 1550 900" class="w-full h-full object-contain">
                 <!-- SVG map will be injected here by JS -->
              </svg>
+        </div>
+
+        <!-- Bottom UI Bar for Cards -->
+        <div id="bottom-ui-bar" class="absolute bottom-0 left-1/2 -translate-x-1/2 p-2 z-20 w-full max-w-md">
+            <div id="card-ui-container" class="ui-panel p-3 rounded-lg text-center hidden">
+                <div id="player-hand-container" class="flex justify-center space-x-2 mb-3">
+                    <!-- Cards will be injected here -->
+                </div>
+                <div id="card-actions-container" class="flex justify-center space-x-2">
+                    <button id="play-cards-btn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-sm disabled:opacity-50" disabled>Play 3 Cards</button>
+                    <button id="discard-card-btn" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-sm disabled:opacity-50" disabled>Discard 1 Card</button>
+                    <button id="skip-cards-btn" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg font-bold text-sm">Skip</button>
+                </div>
+                <p id="card-phase-message" class="text-xs text-gray-400 mt-2">Select 3 cards to play for a bonus, or 1 to discard for a new card.</p>
+            </div>
         </div>
     </div>
 
@@ -81,8 +103,16 @@
             </div>
             <div id="mini-map-container" class="w-full h-16 my-2"></div>
             <div class="grid grid-cols-2 gap-4 text-xs">
-                <div><p class="font-semibold mb-1">Attacker's Roll (<span id="attacker-armies"></span> armies)</p><div id="attacker-dice-container" class="flex justify-center space-x-1 h-8"></div></div>
-                <div><p class="font-semibold mb-1">Defender's Roll (<span id="defender-armies"></span> armies)</p><div id="defender-dice-container" class="flex justify-center space-x-1 h-8"></div></div>
+                <div>
+                    <p class="font-semibold mb-1">Attacker's Roll (<span id="attacker-armies"></span> armies)</p>
+                    <div id="attacker-dice-container" class="flex justify-center space-x-1 h-8"></div>
+                    <div id="attacker-bonus-display" class="bonus-display hidden"></div>
+                </div>
+                <div>
+                    <p class="font-semibold mb-1">Defender's Roll (<span id="defender-armies"></span> armies)</p>
+                    <div id="defender-dice-container" class="flex justify-center space-x-1 h-8"></div>
+                    <div id="defender-bonus-display" class="bonus-display hidden"></div>
+                </div>
             </div>
             <p id="attack-result" class="text-base font-bold my-2 h-5"></p>
             <div id="attack-options">

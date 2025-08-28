@@ -1,6 +1,7 @@
-import { TILE_WIDTH, TILE_HEIGHT, TILE_GAP, territoriesData, continentsData, TURNS_TO_ENTRENCH, PLAYER_COLORS, AI_DIFFICULTIES } from './constants.js';
+import { TILE_WIDTH, TILE_HEIGHT, TILE_GAP, territoriesData, continentsData, TURNS_TO_ENTRENCH, PLAYER_COLORS, AI_DIFFICULTIES, ENTRENCHMENT_DEFENSE_BONUS, AI_NAMES } from './constants.js';
 import * as state from './state.js';
-import { onTerritoryClick, performAttack, performBlitzAttack, stopBlitz, confirmFortify, cancelFortify, endAttackPhase, endTurn } from './game.js';
+import { onTerritoryClick, performAttack, performBlitzAttack, stopBlitz, confirmFortify, cancelFortify, endAttackPhase, endTurn, playSelectedCards, discardCard, proceedToReinforce } from './game.js';
+import { evaluateHand } from './cards.js';
 
 // --- DOM ELEMENTS ---
 export const ui = {
@@ -27,9 +28,17 @@ export const ui = {
     miniMapContainer: document.getElementById('mini-map-container'),
     playerConfigContainer: document.getElementById('player-config-container'),
     addAiBtn: document.getElementById('add-ai-btn'),
+    playerBonusesContainer: document.getElementById('active-bonuses-list'),
+    cardUiContainer: document.getElementById('card-ui-container'),
+    playerHandContainer: document.getElementById('player-hand-container'),
+    playCardsBtn: document.getElementById('play-cards-btn'),
+    discardCardBtn: document.getElementById('discard-card-btn'),
+    skipCardsBtn: document.getElementById('skip-cards-btn'),
 };
 
 let playerConfigs = [];
+let selectedCardIndices = [];
+let availableAiNames = [];
 
 export function getPlayerConfigs() {
     return playerConfigs;
@@ -70,9 +79,16 @@ function renderPlayerConfigs() {
 }
 
 export function setupPlayerConfigUI() {
+    availableAiNames = [...AI_NAMES];
+    // Shuffle the names for variety each time the game loads
+    for (let i = availableAiNames.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availableAiNames[i], availableAiNames[j]] = [availableAiNames[j], availableAiNames[i]];
+    }
+
     playerConfigs = [
         { name: 'You', color: PLAYER_COLORS[0], isAI: false },
-        { name: 'AI 1', color: PLAYER_COLORS[1], isAI: true, difficulty: 'Normal' }
+        { name: availableAiNames.pop() || 'AI Commander', color: PLAYER_COLORS[1], isAI: true, difficulty: 'Normal' }
     ];
     renderPlayerConfigs();
 
@@ -80,7 +96,7 @@ export function setupPlayerConfigUI() {
         if (playerConfigs.length < 5) {
             const nextColor = PLAYER_COLORS.find(c => !playerConfigs.map(p => p.color).includes(c));
             playerConfigs.push({
-                name: `AI ${playerConfigs.filter(p => p.isAI).length + 1}`,
+                name: availableAiNames.pop() || `AI Opponent ${playerConfigs.filter(p => p.isAI).length}`,
                 color: nextColor || '#ffffff',
                 isAI: true,
                 difficulty: 'Normal'
@@ -101,14 +117,11 @@ export function setupPlayerConfigUI() {
         }
         if (target.classList.contains('remove-ai-btn')) {
             const index = parseInt(target.dataset.index);
+            const removedPlayerName = playerConfigs[index].name;
+            if (AI_NAMES.includes(removedPlayerName)) {
+                availableAiNames.push(removedPlayerName);
+            }
             playerConfigs.splice(index, 1);
-            // Re-label AI players
-            let aiCount = 1;
-            playerConfigs.forEach(p => {
-                if (p.isAI) {
-                    p.name = `AI ${aiCount++}`;
-                }
-            });
             renderPlayerConfigs();
         }
     });
@@ -196,6 +209,9 @@ export function renderMap() {
         armyLabel.classList.add('army-label');
         territoriesGroup.appendChild(armyLabel);
     }
+    ui.playCardsBtn.onclick = () => { if (!ui.playCardsBtn.disabled) playSelectedCards(selectedCardIndices); };
+    ui.discardCardBtn.onclick = () => { if (!ui.discardCardBtn.disabled) discardCard(selectedCardIndices[0]); };
+    ui.skipCardsBtn.onclick = () => proceedToReinforce();
 }
 
 // --- UI UPDATES ---
@@ -215,13 +231,168 @@ function updateBalanceOfPower() {
     });
 }
 
+function getSuitSymbol(suit) {
+    return { 'hearts': '♥', 'diamonds': '♦', 'clubs': '♣', 'spades': '♠' }[suit];
+}
+
+function renderMiniCard(card) {
+    const cardEl = document.createElement('div');
+    cardEl.className = `mini-card ${card.suit}`;
+    cardEl.innerHTML = `
+        <span class="rank">${card.rank}</span>
+        <span class="suit">${getSuitSymbol(card.suit)}</span>
+    `;
+    return cardEl;
+}
+
+function updatePlayerBonuses() {
+    if (!ui.playerBonusesContainer) return;
+
+    const playersWithBonuses = new Set(
+        state.gameState.players.filter(p => p.attackBonus).map(p => p.id)
+    );
+
+    ui.playerBonusesContainer.querySelectorAll('.bonus-item').forEach(el => {
+        const playerId = parseInt(el.dataset.playerId);
+        if (!playersWithBonuses.has(playerId)) {
+            el.classList.remove('visible');
+            setTimeout(() => {
+                if (!el.classList.contains('visible')) el.remove();
+            }, 500);
+        }
+    });
+
+    state.gameState.players.forEach(p => {
+        if (p.attackBonus) {
+            let bonusEl = document.getElementById(`bonus-player-${p.id}`);
+            if (!bonusEl) {
+                bonusEl = document.createElement('div');
+                bonusEl.id = `bonus-player-${p.id}`;
+                bonusEl.className = 'bonus-item';
+                bonusEl.dataset.playerId = p.id;
+                bonusEl.style.setProperty('--player-color', p.color);
+
+                bonusEl.innerHTML = `
+                    <div class="font-bold text-base text-white">${p.name}</div>
+                    <div class="text-sm text-yellow-300">${p.attackBonus.name} (+${p.attackBonus.bonus} Attack)</div>
+                    <div class="mini-card-container"></div>
+                `;
+                ui.playerBonusesContainer.appendChild(bonusEl);
+                
+                const miniCardContainer = bonusEl.querySelector('.mini-card-container');
+                if (p.playedHand && miniCardContainer) {
+                    p.playedHand.forEach(card => {
+                        miniCardContainer.appendChild(renderMiniCard(card));
+                    });
+                }
+                
+                setTimeout(() => bonusEl.classList.add('visible'), 10);
+            }
+        }
+    });
+    
+    const title = ui.playerBonusesContainer.querySelector('h3');
+    if (playersWithBonuses.size > 0 && !title) {
+        const titleEl = document.createElement('h3');
+        titleEl.className = 'text-sm font-bold text-gray-300 uppercase tracking-wider px-3 pb-1';
+        titleEl.textContent = 'Active Bonuses';
+        ui.playerBonusesContainer.prepend(titleEl);
+    } else if (playersWithBonuses.size === 0 && title) {
+        title.remove();
+    }
+}
+
+function renderCard(card, index, isClickable) {
+    const cardEl = document.createElement('div');
+    cardEl.className = `card ${card.suit}`;
+    cardEl.dataset.index = index;
+
+    cardEl.innerHTML = `
+        <div class="rank">${card.rank}</div>
+        <div class="suit">${getSuitSymbol(card.suit)}</div>
+    `;
+
+    if (isClickable) {
+        cardEl.onclick = () => {
+            const cardIndex = parseInt(cardEl.dataset.index);
+            const selectionIndex = selectedCardIndices.indexOf(cardIndex);
+
+            if (selectionIndex > -1) {
+                selectedCardIndices.splice(selectionIndex, 1);
+                cardEl.classList.remove('selected');
+            } else {
+                selectedCardIndices.push(cardIndex);
+                cardEl.classList.add('selected');
+            }
+            updateCardActionButtons();
+        };
+    } else {
+        cardEl.classList.add('disabled');
+    }
+    return cardEl;
+}
+
+function updateCardActionButtons() {
+    const player = state.getCurrentPlayer();
+    
+    ui.discardCardBtn.disabled = selectedCardIndices.length !== 1;
+
+    if (selectedCardIndices.length === 3) {
+        const selectedCards = selectedCardIndices.map(i => player.hand[i]);
+        const handValue = evaluateHand(selectedCards);
+        ui.playCardsBtn.disabled = handValue === null;
+    } else {
+        ui.playCardsBtn.disabled = true;
+    }
+}
+
+function updateCardUI() {
+    const player = state.getCurrentPlayer();
+    const humanPlayer = state.gameState.players.find(p => !p.isAI);
+
+    if (!humanPlayer) {
+        ui.cardUiContainer.classList.add('hidden');
+        return;
+    }
+
+    const isMyCardPhase = player && !player.isAI && state.gameState.gamePhase === 'CARD_PLAY_ROUND';
+
+    ui.cardUiContainer.classList.remove('hidden');
+    ui.playerHandContainer.innerHTML = '';
+    
+    if (isMyCardPhase) {
+        selectedCardIndices = [];
+    }
+    
+    humanPlayer.hand.forEach((card, index) => {
+        const cardEl = renderCard(card, index, isMyCardPhase);
+        if (selectedCardIndices.includes(index)) {
+            cardEl.classList.add('selected');
+        }
+        ui.playerHandContainer.appendChild(cardEl);
+    });
+
+    const actionsContainer = document.getElementById('card-actions-container');
+    const message = document.getElementById('card-phase-message');
+    
+    actionsContainer.classList.toggle('hidden', !isMyCardPhase);
+    message.classList.toggle('hidden', !isMyCardPhase);
+    
+    if (isMyCardPhase) {
+        updateCardActionButtons();
+    }
+}
+
 export function updateUI() {
     if (!state.gameState.players || state.gameState.players.length === 0) return;
     updateBalanceOfPower();
+    updatePlayerBonuses();
+    updateCardUI();
+
     const currentPlayer = state.getCurrentPlayer();
     ui.playerNameEl.textContent = currentPlayer.name;
     ui.playerColorIndicatorEl.style.backgroundColor = currentPlayer.color;
-    ui.gamePhaseEl.textContent = state.gameState.gamePhase.replace('_', ' ');
+    ui.gamePhaseEl.textContent = state.gameState.gamePhase.replace(/_/g, ' ');
     ui.aiStatusEl.classList.toggle('hidden', !currentPlayer.isAI);
 
     if (state.gameState.gamePhase === 'REINFORCE' && !currentPlayer.isAI) {
@@ -233,7 +404,9 @@ export function updateUI() {
         ui.nextPhaseBtn.classList.remove('hidden');
     }
 
-    ui.nextPhaseBtn.style.display = currentPlayer.isAI ? 'none' : 'block';
+    const showNextPhaseButton = !currentPlayer.isAI && (state.gameState.gamePhase === 'ATTACK' || state.gameState.gamePhase === 'FORTIFY');
+    ui.nextPhaseBtn.style.display = showNextPhaseButton ? 'block' : 'none';
+
     if (state.gameState.gamePhase === 'ATTACK') {
         ui.nextPhaseBtn.textContent = 'End Attack Phase';
         ui.nextPhaseBtn.onclick = endAttackPhase;
@@ -389,6 +562,22 @@ export function showAttackModal(sourceId, targetId) {
     miniSvg.appendChild(defenderTile);
     ui.miniMapContainer.appendChild(miniSvg);
 
+    const attackerBonusDisplay = document.getElementById('attacker-bonus-display');
+    const defenderBonusDisplay = document.getElementById('defender-bonus-display');
+    const attackerBonus = attacker.attackBonus;
+    if (attackerBonus) {
+        attackerBonusDisplay.textContent = `+${attackerBonus.bonus} ${attackerBonus.name}`;
+        attackerBonusDisplay.classList.remove('hidden');
+    } else {
+        attackerBonusDisplay.classList.add('hidden');
+    }
+    const isEntrenched = targetState.entrenchedTurns >= TURNS_TO_ENTRENCH;
+    if (isEntrenched) {
+        defenderBonusDisplay.textContent = `+${ENTRENCHMENT_DEFENSE_BONUS} Entrenched`;
+        defenderBonusDisplay.classList.remove('hidden');
+    } else {
+        defenderBonusDisplay.classList.add('hidden');
+    }
 
     document.getElementById('attack-result').textContent = '';
     document.getElementById('attacker-dice-container').innerHTML = '';
@@ -526,7 +715,7 @@ export function setupPanZoom() {
     };
 
     const onPointerDown = e => {
-        if (e.target.closest('.territory-rect')) return;
+        if (e.target.closest('.territory-rect, .card')) return;
         isPanning = true;
         startPoint = { x: e.clientX, y: e.clientY };
         mapContainer.style.cursor = 'grabbing';
