@@ -1,24 +1,30 @@
-import { ui, renderMap, setupPanZoom } from './ui.js';
+import { ui, setupPlayerConfigUI, getPlayerConfigs } from './ui.js';
+import { renderMap, setupPanZoom } from './ui.js';
 import { setupGame } from './game.js';
 
 // --- INITIALIZATION ---
 window.onload = () => {
     renderMap();
     setupPanZoom();
+    setupPlayerConfigUI();
 
     ui.startGameBtn.addEventListener('click', () => {
-        const numAI = parseInt(ui.aiPlayerSelect.value);
-        const aiSpeed = parseInt(ui.aiSpeedSelect.value);
+        const playerConfigs = getPlayerConfigs();
+        if (playerConfigs.length < 2) {
+            alert("You need at least one AI opponent to start the game.");
+            return;
+        }
+
         ui.startupModal.classList.add('hidden');
         ui.gameContainer.style.display = 'flex';
-        setupGame(numAI, aiSpeed);
+        setupGame(playerConfigs);
     });
 
     ui.restartGameBtn.addEventListener('click', () => {
         ui.winnerModal.classList.add('hidden');
         ui.gameContainer.style.display = 'none';
         ui.startupModal.classList.remove('hidden');
-        // Reset pan/zoom for next game
+        setupPlayerConfigUI();
         setupPanZoom();
     });
 };

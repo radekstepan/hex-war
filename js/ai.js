@@ -45,8 +45,11 @@ function executeAIAttacks(callback) {
         const defenseBonus = isEntrenched ? 2 : 0; // AI considers entrenchment worth ~2 armies
         return state.gameState.territories[attack.from].armies > (state.gameState.territories[attack.to].armies + defenseBonus);
     });
+    
+    const attackProbability = { 'Easy': 0.5, 'Normal': 0.8, 'Hard': 1.0 };
+    const willAttack = Math.random() < (attackProbability[player.difficulty] || 0.8);
 
-    if (goodAttacks.length === 0 || Math.random() > 0.8) {
+    if (goodAttacks.length === 0 || !willAttack) {
         ui.logMessage("AI concludes its attack phase.");
         callback();
         return;
@@ -102,9 +105,11 @@ function executeAIAttacks(callback) {
             state.gameState.modifiedTerritories.add(attack.to);
             toRect?.classList.add('conquered');
             setTimeout(() => toRect?.classList.remove('conquered'), 800);
-            const armiesToMove = Math.max(1, attackerDice - attackerLosses);
-            defenderState.armies = armiesToMove;
-            attackerState.armies -= armiesToMove;
+            
+            const armiesToMove = Math.min(attackerDice, attackerState.armies - 1);
+            defenderState.armies = armiesToMove > 0 ? armiesToMove : 1;
+            attackerState.armies -= (armiesToMove > 0 ? armiesToMove : 0);
+            if (attackerState.armies < 1) attackerState.armies = 1;
         }
 
         ui.updateUI();

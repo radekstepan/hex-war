@@ -187,6 +187,23 @@ button:disabled, button.disabled {
 .attacker-dice { background-image: linear-gradient(to top right, #c53030, #e53e3e); }
 .defender-dice { background-image: linear-gradient(to top right, #2c5282, #3182ce); }
 
+/* --- Player Config --- */
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.color-swatch:hover {
+    transform: scale(1.1);
+}
+.color-swatch.disabled {
+    cursor: not-allowed;
+    opacity: 0.3;
+}
+
+
 /* --- Other Elements --- */
 .balance-bar {
     transition: width 0.5s ease-in-out;

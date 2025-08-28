@@ -55,19 +55,22 @@ function handleAISurrender(aiPlayer) {
 }
 
 // --- GAME SETUP & FLOW ---
-export function setupGame(numAI, aiSpeed) {
+export function setupGame(playerConfigs) {
     state.initGameState();
-    state.gameState.aiBattleSpeed = aiSpeed;
+    state.gameState.aiBattleSpeed = 500; // Hardcode to "Fast"
 
-    const totalPlayers = numAI + 1;
+    const totalPlayers = playerConfigs.length;
     const startingArmiesMap = { 2: 40, 3: 35, 4: 30, 5: 25 };
-    const startingArmies = startingArmiesMap[totalPlayers];
+    const startingArmies = startingArmiesMap[totalPlayers] || 25;
 
-    const players = [];
-    players.push({ id: 1, name: 'You', color: PLAYER_COLORS[0], isAI: false, capitalTerritory: null });
-    for (let i = 0; i < numAI; i++) {
-        players.push({ id: i + 2, name: `AI ${i + 1}`, color: PLAYER_COLORS[i + 1], isAI: true, capitalTerritory: null });
-    }
+    const players = playerConfigs.map((config, index) => ({
+        id: index + 1,
+        name: config.name,
+        color: config.color,
+        isAI: config.isAI,
+        difficulty: config.difficulty, // Will be undefined for human
+        capitalTerritory: null,
+    }));
     state.setPlayers(players);
 
     const territories = {};
@@ -211,7 +214,6 @@ export function performAttack(attackerDiceCount) {
     sourceState.armies -= attackerLosses;
     targetState.armies -= defenderLosses;
     
-    // --- UPDATE MODAL UI ---
     document.getElementById('attacker-armies').textContent = sourceState.armies;
     document.getElementById('defender-armies').textContent = targetState.armies;
     document.getElementById('mini-armies-attacker').textContent = sourceState.armies;
@@ -227,7 +229,6 @@ export function performAttack(attackerDiceCount) {
         tile.classList.add('losing-armies');
         setTimeout(() => tile.classList.remove('losing-armies'), 300);
     }
-    // --- END UPDATE MODAL UI ---
 
     document.getElementById('attack-result').textContent = `Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`;
     ui.logMessage(`${state.getCurrentPlayer().name} attacks ${territoriesData[targetId].name}. Result: Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`, 'text-yellow-400');
@@ -246,9 +247,13 @@ export function performAttack(attackerDiceCount) {
             rect.classList.add('conquered');
             setTimeout(() => rect.classList.remove('conquered'), 800);
         }
+        
         const armiesToMove = Math.min(attackerDiceCount, sourceState.armies - 1);
         targetState.armies = armiesToMove > 0 ? armiesToMove : 1;
-        sourceState.armies -= armiesToMove > 0 ? armiesToMove : 1;
+        sourceState.armies -= (armiesToMove > 0 ? armiesToMove : 0);
+        if (sourceState.armies < 1) sourceState.armies = 1;
+
+
         ui.closeAttackModal();
         if(checkForWinner()) return;
     } else {
@@ -296,7 +301,6 @@ export function performBlitzAttack() {
             sourceState.armies -= attackerLosses;
             targetState.armies -= defenderLosses;
 
-            // --- UPDATE MODAL UI ---
             document.getElementById('attacker-armies').textContent = sourceState.armies;
             document.getElementById('defender-armies').textContent = targetState.armies;
             document.getElementById('mini-armies-attacker').textContent = sourceState.armies;
@@ -312,7 +316,6 @@ export function performBlitzAttack() {
                 tile.classList.add('losing-armies');
                 setTimeout(() => tile.classList.remove('losing-armies'), 300);
             }
-            // --- END UPDATE MODAL UI ---
 
             document.getElementById('attack-result').textContent = `Attacker loses ${attackerLosses}, Defender loses ${defenderLosses}.`;
             ui.updateUI();
@@ -331,9 +334,11 @@ export function performBlitzAttack() {
                     rect.classList.add('conquered');
                     setTimeout(() => rect.classList.remove('conquered'), 800);
                 }
-                const armiesToMove = sourceState.armies - 1;
+                
+                const armiesToMove = Math.min(attackerDiceCount, sourceState.armies - 1);
                 targetState.armies = armiesToMove > 0 ? armiesToMove : 1;
-                sourceState.armies = 1;
+                sourceState.armies -= (armiesToMove > 0 ? armiesToMove : 0);
+                if (sourceState.armies < 1) sourceState.armies = 1;
 
                 state.setBlitzing(false);
                 ui.closeAttackModal();

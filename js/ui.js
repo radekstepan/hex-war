@@ -1,4 +1,4 @@
-import { TILE_WIDTH, TILE_HEIGHT, TILE_GAP, territoriesData, continentsData, TURNS_TO_ENTRENCH } from './constants.js';
+import { TILE_WIDTH, TILE_HEIGHT, TILE_GAP, territoriesData, continentsData, TURNS_TO_ENTRENCH, PLAYER_COLORS, AI_DIFFICULTIES } from './constants.js';
 import * as state from './state.js';
 import { onTerritoryClick, performAttack, performBlitzAttack, stopBlitz, confirmFortify, cancelFortify, endAttackPhase, endTurn } from './game.js';
 
@@ -7,8 +7,6 @@ export const ui = {
     gameContainer: document.getElementById('game-container'),
     startupModal: document.getElementById('startup-modal'),
     startGameBtn: document.getElementById('start-game-btn'),
-    aiPlayerSelect: document.getElementById('ai-player-select'),
-    aiSpeedSelect: document.getElementById('ai-speed-select'),
     mapSvg: document.getElementById('map-svg'),
     playerNameEl: document.getElementById('player-name'),
     playerColorIndicatorEl: document.getElementById('player-color-indicator'),
@@ -27,7 +25,102 @@ export const ui = {
     blitzOptions: document.getElementById('blitz-options'),
     stopBlitzBtn: document.getElementById('stop-blitz-btn'),
     miniMapContainer: document.getElementById('mini-map-container'),
+    playerConfigContainer: document.getElementById('player-config-container'),
+    addAiBtn: document.getElementById('add-ai-btn'),
 };
+
+let playerConfigs = [];
+
+export function getPlayerConfigs() {
+    return playerConfigs;
+}
+
+function renderPlayerConfigs() {
+    ui.playerConfigContainer.innerHTML = '';
+    const usedColors = playerConfigs.map(p => p.color);
+
+    playerConfigs.forEach((player, index) => {
+        const isAI = player.isAI;
+        const div = document.createElement('div');
+        div.className = 'flex items-center space-x-3 bg-gray-700 p-2 rounded-lg';
+
+        const colorPalette = PLAYER_COLORS.map(color => {
+            const isUsed = usedColors.includes(color) && player.color !== color;
+            return `<div class="color-swatch ${isUsed ? 'disabled' : ''}" data-color="${color}" style="background-color: ${color}; border: ${player.color === color ? '2px solid white' : '2px solid transparent'};"></div>`;
+        }).join('');
+
+        const difficultyOptions = AI_DIFFICULTIES.map(d => `<option value="${d}" ${player.difficulty === d ? 'selected' : ''}>${d}</option>`).join('');
+
+        div.innerHTML = `
+            <div class="w-1/4 font-bold text-lg">${player.name}</div>
+            <div class="w-1/2 flex justify-center space-x-2">${colorPalette}</div>
+            <div class="w-1/4">
+                ${isAI ? `
+                    <select data-index="${index}" class="player-difficulty bg-gray-600 text-white p-1 rounded-md w-full">
+                        ${difficultyOptions}
+                    </select>
+                ` : `<div class="text-sm text-gray-400">Human Player</div>`}
+            </div>
+            <button data-index="${index}" class="remove-ai-btn text-red-500 hover:text-red-400 font-bold ${!isAI || playerConfigs.filter(p => p.isAI).length <= 1 ? 'hidden' : ''}">X</button>
+        `;
+        ui.playerConfigContainer.appendChild(div);
+    });
+
+    ui.addAiBtn.disabled = playerConfigs.length >= 5;
+}
+
+export function setupPlayerConfigUI() {
+    playerConfigs = [
+        { name: 'You', color: PLAYER_COLORS[0], isAI: false },
+        { name: 'AI 1', color: PLAYER_COLORS[1], isAI: true, difficulty: 'Normal' }
+    ];
+    renderPlayerConfigs();
+
+    ui.addAiBtn.onclick = () => {
+        if (playerConfigs.length < 5) {
+            const nextColor = PLAYER_COLORS.find(c => !playerConfigs.map(p => p.color).includes(c));
+            playerConfigs.push({
+                name: `AI ${playerConfigs.filter(p => p.isAI).length + 1}`,
+                color: nextColor || '#ffffff',
+                isAI: true,
+                difficulty: 'Normal'
+            });
+            renderPlayerConfigs();
+        }
+    };
+
+    ui.playerConfigContainer.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.classList.contains('color-swatch') && !target.classList.contains('disabled')) {
+            const color = target.dataset.color;
+            const index = target.closest('.flex').parentElement.querySelector('.remove-ai-btn, .player-difficulty')?.dataset.index;
+            if (index) {
+                playerConfigs[index].color = color;
+                renderPlayerConfigs();
+            }
+        }
+        if (target.classList.contains('remove-ai-btn')) {
+            const index = parseInt(target.dataset.index);
+            playerConfigs.splice(index, 1);
+            // Re-label AI players
+            let aiCount = 1;
+            playerConfigs.forEach(p => {
+                if (p.isAI) {
+                    p.name = `AI ${aiCount++}`;
+                }
+            });
+            renderPlayerConfigs();
+        }
+    });
+
+    ui.playerConfigContainer.addEventListener('change', (e) => {
+        if (e.target.classList.contains('player-difficulty')) {
+            const index = parseInt(e.target.dataset.index);
+            playerConfigs[index].difficulty = e.target.value;
+        }
+    });
+}
+
 
 // --- MAP RENDERING ---
 function getTerritoryCenter(tId) {
@@ -307,7 +400,6 @@ export function showAttackModal(sourceId, targetId) {
     const attackButtons = document.querySelectorAll('.attack-dice-btn');
     attackButtons.forEach(btn => {
         const numDice = parseInt(btn.dataset.dice);
-        // You need numDice + 1 armies to attack with numDice
         btn.disabled = sourceState.armies <= numDice;
         btn.onclick = () => performAttack(numDice);
     });
