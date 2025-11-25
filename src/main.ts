@@ -34,6 +34,35 @@ let state: GameState = {
     fortifying: false
 };
 
+// --- TICKER SYSTEM TYPES & STATE ---
+interface TickerMessage {
+    text: string;
+    priority: number; // 3: Critical (Player Events), 2: Major, 1: Info, 0: Ambient
+    id: number;
+}
+
+interface ActiveTickerItem {
+    el: HTMLElement;
+    x: number;
+    width: number;
+}
+
+const tickerQueue: TickerMessage[] = [];
+const activeTickerItems: ActiveTickerItem[] = [];
+const TICKER_SPEED_PPS = 30; // 30 Pixels Per Second
+const TICKER_GAP = 100; // Pixels between messages
+let lastTickerTime = 0;
+
+let msgCounter = 0;
+let defaultMsgIndex = 0;
+const defaultMessages = [
+    "WORLD DOMINATION PROTOCOL ACTIVE",
+    "DEPLOY TROOPS TO STRATEGIC SECTORS",
+    "MONITOR GLOBAL DEFCON LEVELS",
+    "SECURE CONTINENT BONUSES FOR REINFORCEMENTS",
+    "AI SYSTEMS CALCULATING OPTIMAL STRATEGIES"
+];
+
 // --- DOM ELEMENTS ---
 const mainContainer = document.getElementById('main-container') as HTMLElement;
 const mapGrid = document.getElementById('map-grid') as HTMLElement;
@@ -50,6 +79,7 @@ const strengthBar = document.getElementById('strength-bar') as HTMLElement;
 const reinforcementStatusEl = document.getElementById('reinforcement-status') as HTMLElement;
 const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
 const cpuCountInput = document.getElementById('cpu-count') as HTMLInputElement;
+const tickerWrap = document.getElementById('ticker-wrap') as HTMLElement;
 
 // --- INITIALIZATION ---
 
@@ -71,6 +101,10 @@ function startGame() {
     setupModal.style.display = 'none';
     log("SYS: Initialization sequence started...", "text-white");
     
+    // Start Ticker Loop
+    addTickerUpdate("GLOBAL CONFLICT INITIATED // DEPLOYMENT PHASE ACTIVE", 3);
+    requestAnimationFrame(tickerLoop);
+    
     initGame();
 }
 
@@ -83,6 +117,92 @@ function initGame() {
     updateUI();
     setupOptimizedHover();
     log(`SYS: Global map loaded. ${PLAYERS.length} Players active.`, "text-white");
+}
+
+// --- TICKER LOGIC ---
+
+function addTickerUpdate(text: string, priority: number = 1) {
+    tickerQueue.push({ text: text + " //", priority, id: msgCounter++ });
+    // Sort queue: Higher priority first, then older messages first
+    tickerQueue.sort((a, b) => b.priority - a.priority || a.id - b.id);
+}
+
+function tickerLoop(timestamp: number) {
+    if (!lastTickerTime) {
+        lastTickerTime = timestamp;
+    }
+
+    // Calculate time delta in seconds
+    const deltaTime = (timestamp - lastTickerTime) / 1000;
+    lastTickerTime = timestamp;
+
+    // Sanity check: if delta is huge (e.g. user tabbed away), don't jump
+    if (deltaTime > 0.1) {
+        requestAnimationFrame(tickerLoop);
+        return;
+    }
+
+    const moveAmount = TICKER_SPEED_PPS * deltaTime;
+    const containerWidth = tickerWrap.clientWidth;
+
+    // 1. Move active items
+    for (let i = activeTickerItems.length - 1; i >= 0; i--) {
+        const item = activeTickerItems[i];
+        item.x -= moveAmount;
+        
+        item.el.style.transform = `translate3d(${item.x}px, 0, 0)`;
+
+        // Remove if off screen to the left
+        if (item.x + item.width < -50) {
+            item.el.remove();
+            activeTickerItems.splice(i, 1);
+        }
+    }
+
+    // 2. Check if we can spawn a new item
+    let tailX = -1;
+    if (activeTickerItems.length > 0) {
+        const lastItem = activeTickerItems[activeTickerItems.length - 1];
+        tailX = lastItem.x + lastItem.width;
+    }
+
+    // Spawn if space available (either empty, or tail + gap is visible)
+    if (activeTickerItems.length === 0 || tailX < containerWidth - TICKER_GAP) {
+        spawnNextTickerItem(containerWidth);
+    }
+
+    requestAnimationFrame(tickerLoop);
+}
+
+function spawnNextTickerItem(startPos: number) {
+    let msgData: TickerMessage;
+
+    if (tickerQueue.length > 0) {
+        msgData = tickerQueue.shift()!;
+    } else {
+        // Use default ambient messages if queue is empty
+        msgData = { 
+            text: defaultMessages[defaultMsgIndex] + " //", 
+            priority: 0, 
+            id: -1 
+        };
+        defaultMsgIndex = (defaultMsgIndex + 1) % defaultMessages.length;
+    }
+
+    const el = document.createElement('div');
+    el.className = 'ticker-item';
+    el.innerText = msgData.text;
+
+    el.style.transform = `translate3d(${startPos}px, 0, 0)`;
+    tickerWrap.appendChild(el);
+
+    const width = el.getBoundingClientRect().width;
+    
+    activeTickerItems.push({
+        el: el,
+        x: startPos,
+        width: width
+    });
 }
 
 // --- MAP GENERATION ---
@@ -335,6 +455,7 @@ function handleTerritoryClick(tId: number, e: MouseEvent) {
 function resolveBattle(attacker: Territory, defender: Territory) {
     const attName = CURRENT_TERRITORY_INFO[attacker.id].name;
     const defName = CURRENT_TERRITORY_INFO[defender.id].name;
+    const oldOwner = defender.owner;
     
     if(state.turn === 0) log(`BATTLE: ${attName} -> ${defName}`, "text-neon-pink");
 
@@ -349,10 +470,34 @@ function resolveBattle(attacker: Territory, defender: Territory) {
         updateTroopCount(attacker, -result.moveAmount, false); // Moving out is not damage
         
         if(state.turn === 0) log(`VICTORY: ${defName} captured!`, "text-green-400");
+        
+        // Ticker Updates: Prioritize Player Events
+        if (attacker.owner === 0) {
+            // Player Won
+            addTickerUpdate(`COMBAT UPDATE: YOU CAPTURED ${defName.toUpperCase()}`, 3);
+        } else if (oldOwner === 0) {
+            // Player Lost
+            addTickerUpdate(`CRITICAL: ${defName.toUpperCase()} LOST TO ${PLAYERS[attacker.owner].name}`, 3);
+        } else {
+            // AI vs AI
+            addTickerUpdate(`${PLAYERS[attacker.owner].name} ANNEXED ${defName.toUpperCase()}`, 1);
+        }
+
+        // Check for player elimination
+        if (countTerritories(state.territories, oldOwner) === 0) {
+            addTickerUpdate(`STATUS: ${PLAYERS[oldOwner].name} ELIMINATED FROM THE GRID`, 2);
+        }
+
     } else {
         // Defeat
         updateTroopCount(attacker, -result.attackerLoss, true); // Damage
         if(state.turn === 0) log(`DEFEAT: Assault repelled.`, "text-red-500");
+        
+        // Ticker Updates for Defense
+        if (defender.owner === 0) {
+            // Player defended successfully
+             addTickerUpdate(`DEFENSE: ${PLAYERS[attacker.owner].name} ATTACK ON ${defName.toUpperCase()} REPELLED`, 2);
+        }
     }
 
     state.selectedTerritory = null;
@@ -406,6 +551,13 @@ function endTurn() {
        if(bonus > 0) log(`BONUS: Continent controlled! +${bonus}`, "text-[#ffff00]");
     }
     
+    // Ticker: Announce Turn
+    if (state.turn === 0) {
+        addTickerUpdate("COMMAND UPLINK ESTABLISHED // AWAITING INSTRUCTIONS", 3);
+    } else {
+         addTickerUpdate(`INCOMING TRANSMISSION: ${PLAYERS[state.turn].name} MOVEMENTS DETECTED`, 1);
+    }
+
     updateUI();
     
     if (state.turn !== 0) {
@@ -468,6 +620,8 @@ function checkWinCondition() {
         msg.innerText = `${winner.name} CONQUERED THE GRID`;
         title.style.color = winner.color;
         
+        addTickerUpdate(`GAME OVER: ${winner.name} CONQUERED THE GRID`, 3);
+
         gameOverModal.classList.remove('hidden');
         gameOverModal.style.display = 'flex';
     }
