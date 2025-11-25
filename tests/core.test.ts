@@ -81,10 +81,10 @@ describe('Game Logic Core', () => {
             let i = 0;
             const mockRandom = () => (i++ === 0 ? 0.9 : 0.1); 
             
-            // Att=10, Def=5.
+            // Att=10, Def=5, Bonus=0
             // AttRoll=90, DefRoll=10. Success.
             // Move: floor((10-1)/2) = 4.
-            const result = calculateBattleOutcome(10, 5, mockRandom);
+            const result = calculateBattleOutcome(10, 5, 0, mockRandom);
             
             expect(result.success).toBe(true);
             expect(result.conquered).toBe(true);
@@ -98,10 +98,8 @@ describe('Game Logic Core', () => {
             let i = 0;
             const mockRandom = () => (i++ === 0 ? 0.9 : 0.1);
             
-            // Att=3, Def=1.
-            // AttRoll=27, DefRoll=6. Success.
-            // Remaining=2. Move = max(1, 1) = 1.
-            const result = calculateBattleOutcome(3, 1, mockRandom);
+            // Att=3, Def=1, Bonus=0
+            const result = calculateBattleOutcome(3, 1, 0, mockRandom);
             
             expect(result.success).toBe(true);
             expect(result.moveAmount).toBe(1);
@@ -113,7 +111,7 @@ describe('Game Logic Core', () => {
             const mockRandom = () => (i++ === 0 ? 0.1 : 0.9);
 
             // Att=10. Loss = ceil(5) = 5.
-            const result = calculateBattleOutcome(10, 5, mockRandom);
+            const result = calculateBattleOutcome(10, 5, 0, mockRandom);
             
             expect(result.success).toBe(false);
             expect(result.defenderLoss).toBe(0);
@@ -124,7 +122,7 @@ describe('Game Logic Core', () => {
             let i = 0;
             const mockRandom = () => (i++ === 0 ? 0.1 : 0.9);
             
-            const result = calculateBattleOutcome(1, 1, mockRandom);
+            const result = calculateBattleOutcome(1, 1, 0, mockRandom);
             expect(result.success).toBe(false);
             expect(result.attackerLoss).toBe(1);
         });

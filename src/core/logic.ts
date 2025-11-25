@@ -35,14 +35,15 @@ export function calculateReinforcements(
 
 /**
  * Pure function to calculate battle result given attacker and defender troop counts.
- * Accepts a random generator function for testing.
+ * Accepts an optional attackerBonus to skew RNG (e.g. for Hard AI).
  */
 export function calculateBattleOutcome(
     attackerTroops: number,
     defenderTroops: number,
+    attackerBonus: number = 0,
     randomFn: () => number = Math.random
 ): BattleResult {
-    const attRoll = Math.floor(randomFn() * attackerTroops * 10);
+    const attRoll = Math.floor(randomFn() * attackerTroops * 10) + attackerBonus;
     // Defenders get a small bonus in this logic
     const defRoll = Math.floor(randomFn() * defenderTroops * 10) + 5;
 
@@ -64,8 +65,7 @@ export function calculateBattleOutcome(
         // Defeat Logic
         // Loss is half of attackers, rounded up
         const loss = Math.ceil(attackerTroops / 2);
-        // Cannot lose more than available (leaving 1 behind theoretically, but logic here just returns loss)
-        // If attacker has 1 troop, loss is 1 (wiped out conceptually, though UI prevents attacking with 1)
+        // Cannot lose more than available
         attackerLoss = Math.min(loss, attackerTroops); 
         moveAmount = 0;
     }
@@ -111,9 +111,6 @@ export function generateAdjacencyMap(
                 adjacency[currentId] = new Set();
             }
 
-            // Check 4 directions: Right, Down, Left, Up
-            // We only need to check forward directions (Right, Down) to establish links if we add bidirectional,
-            // but checking all ensures we catch everything relative to the current cell.
             const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
             
             for (const [dy, dx] of directions) {

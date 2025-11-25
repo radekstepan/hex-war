@@ -6,6 +6,7 @@ interface AIAnalysis {
     internal: Territory[]; // Owned territories only adjacent to allies
     threats: Record<number, number>; // Territory ID -> Total Enemy Troops adjacent
     continentStatus: Record<number, { ownedCount: number, totalCount: number, isOwned: boolean }>;
+    chokepoints: number[]; // IDs of critical territories protecting a continent
 }
 
 /**
@@ -20,6 +21,7 @@ export function analyzeMap(
     const borders: Territory[] = [];
     const internal: Territory[] = [];
     const threats: Record<number, number> = {};
+    const chokepoints: number[] = [];
     
     // Continent Stats
     const continentStatus: Record<number, { ownedCount: number, totalCount: number, isOwned: boolean }> = {};
@@ -64,13 +66,24 @@ export function analyzeMap(
         }
     });
 
-    // Finalize continent ownership boolean
+    // Finalize continent ownership and Identify Chokepoints
     Object.keys(continentStatus).forEach(k => {
         const key = Number(k);
         continentStatus[key].isOwned = continentStatus[key].ownedCount === continentStatus[key].totalCount;
+        
+        // If we own this continent (or are very close), mark its borders as critical chokepoints
+        if (continentStatus[key].ownedCount >= continentStatus[key].totalCount - 1) {
+            const contTerritories = continentData[key].territories;
+            contTerritories.forEach(tid => {
+                const terr = territories[tid];
+                if (terr && terr.owner === playerId && borders.includes(terr)) {
+                    chokepoints.push(tid);
+                }
+            });
+        }
     });
 
-    return { owned, borders, internal, threats, continentStatus };
+    return { owned, borders, internal, threats, continentStatus, chokepoints };
 }
 
 /**
@@ -108,8 +121,6 @@ export function getDeployments(
         
         // Try to even out borders based on local threat
         while (remaining > 0) {
-            // Find the border with the lowest ratio of (Current Troops + Planned) / Threat
-            // If threat is 0 (shouldn't happen for border), assume 1
             let bestTarget = targets[0];
             let minRatio = Number.MAX_VALUE;
 
@@ -130,72 +141,81 @@ export function getDeployments(
         return deployments;
     }
 
-    // --- HARD STRATEGY: Continent Control & Critical Defense ---
+    // --- HARD STRATEGY: CALCULATED DOMINATION ---
     if (difficulty === 'HARD') {
-        // 1. Identify Target Continent (closest to completion)
+        // 1. Identify Target Continent (closest to completion with best bonus/size ratio)
         let targetContinentId: number | null = null;
-        let maxOwnershipPct = -1;
+        let maxScore = -1;
 
         for (const [cIdStr, status] of Object.entries(analysis.continentStatus)) {
             const cId = Number(cIdStr);
-            if (status.isOwned) continue; // Already have it
+            if (status.isOwned) continue; 
+            
             const pct = status.ownedCount / status.totalCount;
-            if (pct > maxOwnershipPct && pct > 0) {
-                maxOwnershipPct = pct;
+            const bonusWeight = continentData[cId].bonus / 10;
+            // Weighted score: Percent Complete + Raw Bonus Value
+            const score = pct + bonusWeight;
+
+            if (score > maxScore && pct > 0) {
+                maxScore = score;
                 targetContinentId = cId;
             }
         }
 
-        // 2. Score every owned territory
+        // 2. Score every owned territory for deployment
         const scores: Record<number, number> = {};
         
         analysis.owned.forEach(t => {
             let score = 0;
             const threat = analysis.threats[t.id] || 0;
             const isBorder = analysis.borders.includes(t);
-            const tContinent = territoryInfo[t.id]?.continent;
+            const currentTroops = t.troops;
 
-            // Base Priority: Defend threats
-            if (isBorder) {
-                // If we are vastly outnumbered, panic defend
-                if (t.troops < threat) score += 50; 
-                // General border maintenance
-                score += 10;
+            // PRIORITY 1: Hold Chokepoints (Defend existing bonuses)
+            if (analysis.chokepoints.includes(t.id)) {
+                score += 500; 
+                // Ensure we have a safety buffer against threats
+                if (currentTroops < threat * 1.5) score += 200;
             }
 
-            // Offensive Priority: Capture Target Continent
-            if (targetContinentId !== null) {
-                // If this territory is IN the target continent and borders an enemy IN the same continent
-                if (tContinent === targetContinentId) {
-                    const hasEnemyInContinent = Array.from(t.neighbors).some(nid => {
-                        const n = territories[nid];
-                        return n.owner !== playerId && territoryInfo[n.id]?.continent === targetContinentId;
-                    });
-                    if (hasEnemyInContinent) score += 100;
-                }
-                
-                // If this territory borders the target continent (staging ground)
-                const bordersTarget = Array.from(t.neighbors).some(nid => territoryInfo[nid]?.continent === targetContinentId);
-                if (bordersTarget && tContinent !== targetContinentId) score += 20;
+            // PRIORITY 2: Secure the Target Continent
+            const tContinent = territoryInfo[t.id]?.continent;
+            if (targetContinentId !== null && tContinent === targetContinentId) {
+                score += 100;
+                // If it borders an enemy inside the target continent, kill them
+                const hasEnemyInContinent = Array.from(t.neighbors).some(nid => {
+                    const n = territories[nid];
+                    return n.owner !== playerId && territoryInfo[n.id]?.continent === targetContinentId;
+                });
+                if (hasEnemyInContinent) score += 150;
+            }
+
+            // PRIORITY 3: General Border Defense
+            if (isBorder) {
+                score += 20;
+                // If vast enemy stack adjacent, match it or deter it
+                if (threat > currentTroops) score += (threat - currentTroops) * 2;
             }
 
             scores[t.id] = score;
         });
 
-        // 3. Weighted Random Deployment based on Scores
-        // To avoid being purely deterministic, we pick top 3 candidates and rotate, or weighted selection
+        // 3. Greedy Weighted Deployment
         while (remaining > 0) {
             let bestId = -1;
             let maxScore = -9999;
             
-            // Recalculate best dynamic choice
             for (const t of analysis.owned) {
-                // Diminishing returns: Score decreases as we add troops to it this turn
                 const added = deployments[t.id] || 0;
-                const effectiveScore = scores[t.id] / (1 + added * 0.5); 
-                
-                if (effectiveScore > maxScore) {
-                    maxScore = effectiveScore;
+                const current = t.troops + added;
+                let dynScore = scores[t.id];
+
+                // Diminishing returns: prevent infinite stacking if threat is low
+                const threat = analysis.threats[t.id] || 0;
+                if (current > threat * 2 + 5 && threat > 0) dynScore /= 2;
+
+                if (dynScore > maxScore) {
+                    maxScore = dynScore;
                     bestId = t.id;
                 }
             }
@@ -203,7 +223,6 @@ export function getDeployments(
             if (bestId !== -1) {
                 deployments[bestId] = (deployments[bestId] || 0) + 1;
             } else {
-                // Fallback
                 const fallback = analysis.owned[0];
                 deployments[fallback.id] = (deployments[fallback.id] || 0) + 1;
             }
@@ -237,57 +256,70 @@ export function getNextAttack(
             const target = territories[nid];
             if (target.owner !== playerId) {
                 let score = 0;
-                
-                // Win Probability Heuristic
-                // Source troops must be > 1 to attack.
-                // Attacking with N troops vs M defenders. 
-                // Basic rule: Need Source > Target.
                 const diff = source.troops - target.troops;
                 
                 // --- DIFFICULTY LOGIC ---
                 
                 if (difficulty === 'EASY') {
-                    // Random/Chaotic. Only cares if it's theoretically possible.
                     if (source.troops > 1) {
                         score = Math.random() * 10;
                     }
                 }
                 else if (difficulty === 'MEDIUM') {
-                    // Conservative. Wants advantage.
                     if (source.troops > target.troops + 1) {
                         score = 50 + diff;
                     } else if (source.troops > 1 && target.troops === 1) {
-                        // Pick off weaklings
                         score = 20;
                     } else {
-                        score = -100; // Don't suicide
+                        score = -100;
                     }
                 }
                 else if (difficulty === 'HARD') {
-                    // Aggressive & Strategic
+                    // --- BRUTAL LOGIC ---
                     
-                    // 1. Win Chance
+                    // 1. Probability of Victory
                     if (source.troops > target.troops) score += 20;
-                    if (source.troops > target.troops * 1.5) score += 20;
-                    
-                    // 2. Continent Bonus Breaking
-                    // We don't have easy access to enemy continent wholeness here without expensive calc,
-                    // but we can prioritize breaking into a new continent.
-                    const sourceCont = territoryInfo[source.id].continent;
+                    if (source.troops >= target.troops * 1.5) score += 40; // Overwhelming force
+                    if (source.troops < target.troops) score -= 200; // Avoid losing battles
+
+                    // 2. Break Enemy Bonuses (Especially Human)
                     const targetCont = territoryInfo[target.id].continent;
-                    if (sourceCont !== targetCont) score += 10; // Expansion
+                    
+                    // Scan continent to see if enemy owns most of it
+                    let enemyContCount = 0;
+                    let contSize = 0;
+                    Object.values(territories).forEach(t => {
+                        if (territoryInfo[t.id]?.continent === targetCont) {
+                            contSize++;
+                            if (t.owner === target.owner) enemyContCount++;
+                        }
+                    });
+                    
+                    const enemyHasBonus = (enemyContCount === contSize);
+                    const enemyNearBonus = (enemyContCount >= contSize - 1);
+                    
+                    if (enemyHasBonus) {
+                        score += 300; // PRIORITY #1: Break the bonus
+                        if (target.owner === 0) score += 200; // PRIORITY #0: Screw the Human specifically
+                    } else if (enemyNearBonus) {
+                         score += 100; // Prevent them from getting it
+                    }
 
-                    // 3. Chain Attack Potential
-                    // If capture allows merging with another friendly territory
-                    const connectsToFriendly = Array.from(target.neighbors).some(nnid => territories[nnid].owner === playerId);
-                    if (connectsToFriendly) score += 15;
+                    // 3. Expansion (Connect Continents)
+                    const sourceCont = territoryInfo[source.id].continent;
+                    if (sourceCont === targetCont) {
+                        score += 50; // Consolidating own continent
+                    }
 
-                    // 4. Eliminate Weak Player (Killer Instinct)
-                    // (Simplified: just prioritize low troop targets)
-                    if (target.troops === 1) score += 10;
+                    // 4. "The Blitz" - Keep momentum
+                    // If we have a huge stack, keep moving to utilize the soldiers
+                    if (source.troops > 8 && source.troops > target.troops * 2) score += 60;
 
-                    // Safety Check: Never attack if we are guaranteed to lose majority
-                    if (source.troops <= target.troops) score = -1000;
+                    // 5. Eliminate Weak Players
+                    if (target.troops === 1) score += 15;
+
+                    // Safety Check: Never attack if we are guaranteed to lose unless it breaks a bonus
+                    if (source.troops <= target.troops + 1 && !enemyHasBonus) score = -1000;
                 }
 
                 if (score > 0) {
@@ -302,13 +334,13 @@ export function getNextAttack(
     // Sort by score descending
     candidates.sort((a, b) => b.score - a.score);
 
-    // EASY: Pick random from top 50%
+    // EASY: Pick random from top
     if (difficulty === 'EASY') {
         const idx = Math.floor(Math.random() * candidates.length);
         return { sourceId: candidates[idx].source.id, targetId: candidates[idx].target.id };
     }
 
-    // MEDIUM/HARD: Pick the best
+    // MEDIUM/HARD: Pick the absolute best
     return { sourceId: candidates[0].source.id, targetId: candidates[0].target.id };
 }
 
@@ -321,80 +353,71 @@ export function getFortification(
     territories: Record<number, Territory>
 ): { sourceId: number, targetId: number, amount: number } | null {
     
-    if (difficulty === 'EASY') return null; // Easy AI doesn't fortify
+    if (difficulty === 'EASY') return null; 
 
-    // Analyze map
-    // We assume analyzeMap is available or we re-implement simplified logic for speed
-    // Find "Internal" territories (surrounded by friends) with troops > 1
-    const internalSources: Territory[] = [];
+    // Re-analyze for safety
+    const analysis = analyzeMap(playerId, territories, {}); 
     
-    // Find "Border" territories (adjacent to enemy) that need help
-    const borderTargets: Territory[] = [];
-    const threats: Record<number, number> = {};
-
-    Object.values(territories).forEach(t => {
-        if (t.owner === playerId) {
-            let isBorder = false;
-            let enemyTroops = 0;
-            t.neighbors.forEach(nid => {
-                const n = territories[nid];
-                if (n.owner !== playerId) {
-                    isBorder = true;
-                    enemyTroops += n.troops;
+    // MEDIUM: Simple Internal -> Border logic (Move 1 step)
+    if (difficulty === 'MEDIUM') {
+        if (analysis.internal.length > 0 && analysis.borders.length > 0) {
+            for (const source of analysis.internal) {
+                if (source.troops <= 1) continue;
+                for (const nid of source.neighbors) {
+                    const target = territories[nid];
+                    if (target.owner === playerId && analysis.borders.includes(target)) {
+                        return { sourceId: source.id, targetId: target.id, amount: source.troops - 1 };
+                    }
                 }
-            });
-
-            if (isBorder) {
-                borderTargets.push(t);
-                threats[t.id] = enemyTroops;
-            } else if (t.troops > 1) {
-                internalSources.push(t);
             }
         }
-    });
+        return null;
+    }
 
-    // 1. Move from Internal to Border (Priority)
-    if (internalSources.length > 0 && borderTargets.length > 0) {
-        // Find pair with valid connection
-        // BFS/Pathfinding is expensive for this scope, so we check direct neighbors 
-        // OR neighbors of neighbors (simplified logic: only direct neighbors for now to be safe)
-        
-        for (const source of internalSources) {
-            // Check immediate neighbors for a border needing help
-            for (const nid of source.neighbors) {
-                const target = territories[nid];
-                if (target.owner === playerId && borderTargets.includes(target)) {
-                    // Found a move!
-                    return {
-                        sourceId: source.id,
-                        targetId: target.id,
-                        amount: source.troops - 1
-                    };
+    // HARD MODE: Frontline Stacking & Deathballing
+    // Move from Safe -> Active Border
+    // OR Move from Passive Border -> Active Border (if needed)
+    
+    let bestMove: { sourceId: number, targetId: number, amount: number, score: number } | null = null;
+    const sources = [...analysis.internal, ...analysis.borders];
+
+    for (const source of sources) {
+        if (source.troops <= 1) continue;
+
+        for (const nid of source.neighbors) {
+            const target = territories[nid];
+            // Must move to own territory
+            if (target.owner !== playerId) continue;
+
+            let score = 0;
+            const targetThreat = analysis.threats[target.id] || 0;
+            const sourceThreat = analysis.threats[source.id] || 0;
+            
+            // Logic 1: Move towards danger
+            if (targetThreat > sourceThreat) {
+                score += (targetThreat - sourceThreat) * 10;
+            }
+
+            // Logic 2: Evacuate internal territories completely
+            if (analysis.internal.includes(source) && analysis.borders.includes(target)) {
+                score += 50;
+            }
+
+            // Logic 3: Chokepoint Reinforcement
+            // (Requires us to know if target is a chokepoint, but threat level usually correlates)
+            
+            // If the move makes sense
+            if (score > 0 && (!bestMove || score > bestMove.score)) {
+                const amount = source.troops - 1;
+                if (amount > 0) {
+                    bestMove = { sourceId: source.id, targetId: target.id, amount, score };
                 }
             }
         }
     }
 
-    // 2. HARD MODE: Balance Borders
-    // If one border is weak and a neighbor border is strong, transfer.
-    if (difficulty === 'HARD') {
-        for (const source of borderTargets) {
-            if (source.troops > 5) { // Only move if we have excess
-                 for (const nid of source.neighbors) {
-                     const target = territories[nid];
-                     // Target must be ours, a border, and weaker
-                     if (target.owner === playerId && borderTargets.includes(target)) {
-                         if (target.troops < source.troops / 2) {
-                             return {
-                                 sourceId: source.id,
-                                 targetId: target.id,
-                                 amount: Math.floor(source.troops / 2)
-                             };
-                         }
-                     }
-                 }
-            }
-        }
+    if (bestMove) {
+        return { sourceId: bestMove.sourceId, targetId: bestMove.targetId, amount: bestMove.amount };
     }
 
     return null;

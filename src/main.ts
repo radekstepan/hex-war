@@ -482,7 +482,14 @@ function resolveBattle(attacker: Territory, defender: Territory) {
     
     if(state.turn === 0) log(`BATTLE: ${attName} -> ${defName}`, "text-neon-pink");
 
-    const result = calculateBattleOutcome(attacker.troops, defender.troops);
+    // UNFAIR ADVANTAGE for Hard AI
+    const attackerPlayer = PLAYERS[attacker.owner];
+    let bonus = 0;
+    if (attackerPlayer.type === 'CPU' && attackerPlayer.difficulty === 'HARD') {
+        bonus = 15; // Significant statistical advantage to represent "Expert" luck
+    }
+
+    const result = calculateBattleOutcome(attacker.troops, defender.troops, bonus);
 
     if (result.success) {
         // Victory
