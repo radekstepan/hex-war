@@ -59,6 +59,11 @@ body {
     align-items: center;
 }
 
+/* Fix: Ensure hidden class overrides the display: flex above */
+.modal-overlay.hidden {
+    display: none !important;
+}
+
 /* Grid Background */
 .world-grid {
     background-image: 
