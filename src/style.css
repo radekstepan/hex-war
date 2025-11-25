@@ -147,6 +147,29 @@ body {
     100% { box-shadow: 0 0 5px #00ff00; }
 }
 
+/* Attack Animations */
+.attacking-source {
+    animation: flash-white 0.5s ease-in-out;
+    z-index: 30;
+}
+
+.under-attack {
+    animation: flash-red 0.5s ease-in-out;
+    z-index: 30;
+}
+
+@keyframes flash-white {
+    0% { box-shadow: 0 0 10px #fff !important; }
+    50% { background-color: #ffffff !important; box-shadow: 0 0 40px #ffffff !important; }
+    100% { box-shadow: 0 0 10px #fff !important; }
+}
+
+@keyframes flash-red {
+    0% { box-shadow: 0 0 10px #ff0000 !important; }
+    50% { background-color: #ff0000 !important; box-shadow: 0 0 40px #ff0000 !important; }
+    100% { box-shadow: 0 0 10px #ff0000 !important; }
+}
+
 /* Connections Layer */
 #connections-layer {
     position: absolute;

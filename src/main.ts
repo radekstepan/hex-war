@@ -457,6 +457,23 @@ function resolveBattle(attacker: Territory, defender: Territory) {
     const defName = CURRENT_TERRITORY_INFO[defender.id].name;
     const oldOwner = defender.owner;
     
+    // VISUAL FEEDBACK: Apply Flash Classes
+    attacker.cells.forEach(c => {
+        c.classList.remove('attacking-source');
+        void c.offsetWidth; // Force reflow
+        c.classList.add('attacking-source');
+    });
+    defender.cells.forEach(c => {
+        c.classList.remove('under-attack');
+        void c.offsetWidth;
+        c.classList.add('under-attack');
+    });
+    // Remove after animation (500ms)
+    setTimeout(() => {
+        attacker.cells.forEach(c => c.classList.remove('attacking-source'));
+        defender.cells.forEach(c => c.classList.remove('under-attack'));
+    }, 500);
+    
     if(state.turn === 0) log(`BATTLE: ${attName} -> ${defName}`, "text-neon-pink");
 
     const result = calculateBattleOutcome(attacker.troops, defender.troops);
