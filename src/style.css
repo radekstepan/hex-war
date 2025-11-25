@@ -125,9 +125,9 @@ body {
 }
 
 .valid-target {
-    background-color: rgba(255, 0, 0, 1) !important;
-    box-shadow: 0 0 15px red !important;
-    animation: pulse-red 1s infinite;
+    background-color: rgba(220, 20, 60, 0.7) !important; /* Crimson Red, less harsh than pure red */
+    box-shadow: none !important; /* Removing shadow prevents seeing grid lines between cells */
+    animation: pulse-target 1.5s infinite alternate;
 }
 
 .valid-fortify {
@@ -136,10 +136,9 @@ body {
      animation: pulse-green 1s infinite;
 }
 
-@keyframes pulse-red {
-    0% { box-shadow: 0 0 5px red; }
-    50% { box-shadow: 0 0 20px red; }
-    100% { box-shadow: 0 0 5px red; }
+@keyframes pulse-target {
+    from { background-color: rgba(220, 20, 60, 0.8); }
+    to { background-color: rgba(220, 20, 60, 0.5); }
 }
 
 @keyframes pulse-green {
