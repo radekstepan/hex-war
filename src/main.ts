@@ -11,6 +11,7 @@ import {
     generateAdjacencyMap 
 } from './core/logic';
 import { hexToRgb } from './core/utils';
+import { getTroopIcon } from './icons';
 
 // --- CONFIGURATION ---
 let CURRENT_MAP_LAYOUT = CLASSIC_MAP_LAYOUT;
@@ -114,7 +115,8 @@ function createGridAndTerritories() {
                 if (tId !== nLeft) el.style.borderLeft = '2px solid #000';
                 if (tId !== nRight) el.style.borderRight = '2px solid #000';
 
-                el.onclick = () => handleTerritoryClick(tId);
+                // Pass the event object to handle shift-clicks
+                el.onclick = (e) => handleTerritoryClick(tId, e);
 
                 if (!state.territories[tId]) {
                     state.territories[tId] = {
@@ -136,11 +138,16 @@ function createGridAndTerritories() {
         const avgX = (t.center.x / t.center.count) + 0.5;
         const avgY = (t.center.y / t.center.count) + 0.5;
         t.centerPct = { x: (avgX / COLS) * 100, y: (avgY / ROWS) * 100 };
+        
         const badge = document.createElement('div');
         badge.className = 'troop-badge';
         badge.style.left = `${t.centerPct.x}%`;
         badge.style.top = `${t.centerPct.y}%`;
         badge.id = `badge-${t.id}`;
+        
+        // Render initial tank icon
+        updateBadgeContent(badge, t.troops, PLAYERS[t.owner].color);
+        
         badgesLayer.appendChild(badge);
     });
 }
@@ -226,7 +233,7 @@ function assignTerritories() {
 
 // --- INTERACTION ---
 
-function handleTerritoryClick(tId: number) {
+function handleTerritoryClick(tId: number, e: MouseEvent) {
     if (state.gameOver || state.setupMode) return;
     if (state.turn !== 0) return;
 
@@ -235,8 +242,14 @@ function handleTerritoryClick(tId: number) {
     if (state.phase === 'deploy') {
         if (terr.owner === state.turn) {
             if (state.reinforcements > 0) {
-                updateTroopCount(terr, 1); 
-                state.reinforcements--;
+                // Shift-click deploys all remaining reinforcements
+                let amount = 1;
+                if (e.shiftKey) {
+                    amount = state.reinforcements;
+                }
+                
+                updateTroopCount(terr, amount); 
+                state.reinforcements -= amount;
                 updateUI();
                 
                 if (state.reinforcements === 0) {
@@ -295,8 +308,14 @@ function handleTerritoryClick(tId: number) {
             
             if (terr.owner === state.turn && source.neighbors.has(tId)) {
                 if (source.troops > 1) {
-                    updateTroopCount(source, -1);
-                    updateTroopCount(terr, 1);
+                    // Shift-click moves all available troops (leaving 1 behind)
+                    let amount = 1;
+                    if (e.shiftKey) {
+                        amount = source.troops - 1;
+                    }
+                    
+                    updateTroopCount(source, -amount, false); // False = Not damage
+                    updateTroopCount(terr, amount, false);
                     
                     if (source.troops === 1) {
                         setTimeout(() => endTurn(), 300);
@@ -326,13 +345,13 @@ function resolveBattle(attacker: Territory, defender: Territory) {
         defender.troops = 0;
         defender.owner = attacker.owner;
         
-        updateTroopCount(defender, result.moveAmount); 
-        updateTroopCount(attacker, -result.moveAmount); 
+        updateTroopCount(defender, result.moveAmount, false); 
+        updateTroopCount(attacker, -result.moveAmount, false); // Moving out is not damage
         
         if(state.turn === 0) log(`VICTORY: ${defName} captured!`, "text-green-400");
     } else {
         // Defeat
-        updateTroopCount(attacker, -result.attackerLoss);
+        updateTroopCount(attacker, -result.attackerLoss, true); // Damage
         if(state.turn === 0) log(`DEFEAT: Assault repelled.`, "text-red-500");
     }
 
@@ -481,27 +500,62 @@ function renderMapState() {
                 }
             }
         });
+        
         const badge = document.getElementById(`badge-${terr.id}`);
         if(badge) {
-            badge.innerText = terr.troops.toString();
-            badge.style.borderColor = pColor;
-            badge.style.boxShadow = `0 0 5px ${pColor}`;
+            updateBadgeContent(badge, terr.troops, pColor);
         }
     });
     updateStrengthBar();
 }
 
-function updateTroopCount(terr: Territory, delta: number) {
+function updateTroopCount(terr: Territory, delta: number, isBattleDamage: boolean = true) {
     terr.troops += delta;
     const badge = document.getElementById(`badge-${terr.id}`);
+    
     if(badge) {
-        badge.innerText = terr.troops.toString();
-        const animClass = delta > 0 ? 'anim-up' : 'anim-down';
-        badge.classList.remove('anim-up', 'anim-down');
-        void badge.offsetWidth; 
+        updateBadgeContent(badge, terr.troops, PLAYERS[terr.owner].color);
+        
+        let animClass = '';
+        if (delta > 0) {
+            animClass = 'anim-up';
+        } else {
+            // Delta < 0
+            if (isBattleDamage) {
+                animClass = 'anim-down'; // Red flash
+            } else {
+                animClass = 'anim-neutral'; // Neutral flash
+            }
+        }
+        
+        badge.classList.remove('anim-up', 'anim-down', 'anim-neutral');
+        void badge.offsetWidth; // Trigger reflow
         badge.classList.add(animClass);
     }
     updateStrengthBar();
+}
+
+function updateBadgeContent(badge: HTMLElement, count: number, color: string) {
+    let typeClass = '';
+    let svg = '';
+
+    if (count === 1) {
+        typeClass = 'badge-soldier';
+        svg = getTroopIcon('soldier', color);
+    } else if (count < 5) {
+        typeClass = 'badge-small';
+        svg = getTroopIcon('small', color);
+    } else {
+        typeClass = 'badge-large';
+        svg = getTroopIcon('large', color);
+    }
+
+    // Reset classes
+    badge.classList.remove('badge-soldier', 'badge-small', 'badge-large');
+    badge.classList.add(typeClass);
+
+    // Number displayed ABOVE the icon via CSS positioning
+    badge.innerHTML = `<span>${count}</span>${svg}`;
 }
 
 function updateStrengthBar() {
