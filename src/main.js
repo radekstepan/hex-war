@@ -357,20 +357,24 @@ function renderMapState() {
 }
 
 function updateStrengthBar() {
-    const totalTroops = Object.values(state.territories).reduce((acc, t) => acc + t.troops, 0);
+    // Calculate strength based on reinforcement potential
+    const playerStrengths = PLAYERS.map(p => {
+        return {
+            player: p,
+            strength: calculateReinforcements(p.id, true) // Silent mode
+        };
+    });
+
+    const totalStrength = playerStrengths.reduce((acc, p) => acc + p.strength, 0);
     strengthBar.innerHTML = '';
     
-    PLAYERS.forEach(p => {
-        const pTroops = Object.values(state.territories)
-            .filter(t => t.owner === p.id)
-            .reduce((acc, t) => acc + t.troops, 0);
-        
-        if (pTroops > 0) {
-            const pct = (pTroops / totalTroops) * 100;
+    playerStrengths.forEach(pData => {
+        if (pData.strength > 0) {
+            const pct = (pData.strength / totalStrength) * 100;
             const el = document.createElement('div');
             el.style.width = `${pct}%`;
-            el.style.backgroundColor = p.color;
-            el.title = `${p.name}: ${pTroops} units`;
+            el.style.backgroundColor = pData.player.color;
+            el.title = `${pData.player.name}: Est. ${pData.strength} reinforcements/turn`;
             strengthBar.appendChild(el);
         }
     });
@@ -656,8 +660,10 @@ function endTurn() {
     }
 }
 
-function calculateReinforcements(pid) {
+function calculateReinforcements(pid, silent = false) {
     let count = countTerritories(pid);
+    if (count === 0) return 0;
+
     let base = Math.max(3, Math.floor(count / 3));
     let bonus = 0;
 
@@ -665,7 +671,7 @@ function calculateReinforcements(pid) {
         const ownsAll = data.territories.every(tid => state.territories[tid].owner === pid);
         if (ownsAll) {
             bonus += data.bonus;
-            if (pid === 0) log(`BONUS: ${data.name} controlled! +${data.bonus}`, "text-[#ffff00]");
+            if (pid === 0 && !silent) log(`BONUS: ${data.name} controlled! +${data.bonus}`, "text-[#ffff00]");
         }
     }
     return base + bonus;
