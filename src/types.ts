@@ -2,7 +2,11 @@ export interface Player {
     id: number;
     name: string;
     color: string;
+    type: 'HUMAN' | 'CPU';
+    difficulty?: AIDifficulty; // Only for CPU
 }
+
+export type AIDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
 export interface Territory {
     id: number;

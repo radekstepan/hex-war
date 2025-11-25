@@ -3,13 +3,14 @@ import {
     ROWS, COLS, CLASSIC_MAP_LAYOUT, CLASSIC_TERRITORY_INFO, 
     CLASSIC_CONTINENT_DATA, CLASSIC_CONNECTIONS, PLAYER_COLORS 
 } from './constants';
-import { GameState, Territory, Player } from './types';
+import { GameState, Territory, Player, AIDifficulty } from './types';
 import { 
     calculateReinforcements, 
     calculateBattleOutcome, 
     countTerritories, 
     generateAdjacencyMap 
 } from './core/logic';
+import { getDeployments, getNextAttack, getFortification } from './core/ai';
 import { hexToRgb } from './core/utils';
 import { getTroopIcon } from './icons';
 
@@ -79,6 +80,7 @@ const strengthBar = document.getElementById('strength-bar') as HTMLElement;
 const reinforcementStatusEl = document.getElementById('reinforcement-status') as HTMLElement;
 const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
 const cpuCountInput = document.getElementById('cpu-count') as HTMLInputElement;
+const difficultySelect = document.getElementById('difficulty-select') as HTMLSelectElement;
 const tickerWrap = document.getElementById('ticker-wrap') as HTMLElement;
 
 // --- INITIALIZATION ---
@@ -87,19 +89,22 @@ startBtn.onclick = startGame;
 
 function startGame() {
     const cpuCount = parseInt(cpuCountInput.value);
+    const difficulty = difficultySelect.value as AIDifficulty;
     
-    PLAYERS = [{ id: 0, name: 'PLAYER 1', color: '#00ffff' }];
+    PLAYERS = [{ id: 0, name: 'PLAYER 1', color: '#00ffff', type: 'HUMAN' }];
     for (let i = 0; i < cpuCount; i++) {
         PLAYERS.push({ 
             id: i + 1, 
             name: `PLAYER ${i + 2}`, 
-            color: PLAYER_COLORS[i % PLAYER_COLORS.length] 
+            color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+            type: 'CPU',
+            difficulty: difficulty
         });
     }
     
     state.setupMode = false;
     setupModal.style.display = 'none';
-    log("SYS: Initialization sequence started...", "text-white");
+    log(`SYS: Init sequence. AI Level: ${difficulty}`, "text-white");
     
     // Start Ticker Loop
     addTickerUpdate("GLOBAL CONFLICT INITIATED // DEPLOYMENT PHASE ACTIVE", 3);
@@ -355,7 +360,8 @@ function assignTerritories() {
 
 function handleTerritoryClick(tId: number, e: MouseEvent) {
     if (state.gameOver || state.setupMode) return;
-    if (state.turn !== 0) return;
+    const player = PLAYERS[state.turn];
+    if (player.type === 'CPU') return; // Cannot click during CPU turn
 
     const terr = state.territories[tId];
 
@@ -544,7 +550,9 @@ function btnAction() {
 
 function endTurn() {
     if (state.gameOver) return;
-    if (state.phase === 'deploy' && state.reinforcements > 0) return;
+    
+    // Safety check: Human cannot skip deploy with troops remaining
+    if (PLAYERS[state.turn].type === 'HUMAN' && state.phase === 'deploy' && state.reinforcements > 0) return;
 
     let attempts = 0;
     do {
@@ -569,7 +577,7 @@ function endTurn() {
     }
     
     // Ticker: Announce Turn
-    if (state.turn === 0) {
+    if (PLAYERS[state.turn].type === 'HUMAN') {
         addTickerUpdate("COMMAND UPLINK ESTABLISHED // AWAITING INSTRUCTIONS", 3);
     } else {
          addTickerUpdate(`INCOMING TRANSMISSION: ${PLAYERS[state.turn].name} MOVEMENTS DETECTED`, 1);
@@ -577,7 +585,7 @@ function endTurn() {
 
     updateUI();
     
-    if (state.turn !== 0) {
+    if (PLAYERS[state.turn].type === 'CPU') {
         log(`SYS: ${PLAYERS[state.turn].name} calculating...`, "text-gray-500");
         setTimeout(cpuTurn, 800);
     } else {
@@ -585,41 +593,91 @@ function endTurn() {
     }
 }
 
-function cpuTurn() {
+async function cpuTurn() {
     if (state.gameOver) return;
-    const myTerrs = Object.values(state.territories).filter(t => t.owner === state.turn);
-    if (myTerrs.length === 0) { endTurn(); return; } 
+    const player = PLAYERS[state.turn];
+    if (player.type !== 'CPU') return;
 
-    // 1. Deploy
-    while(state.reinforcements > 0) {
-        const t = myTerrs[Math.floor(Math.random() * myTerrs.length)];
-        updateTroopCount(t, 1);
-        state.reinforcements--;
+    // Helper for delay
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // 1. DEPLOYMENT
+    const deployments = getDeployments(
+        player.id, 
+        player.difficulty || 'MEDIUM', 
+        state.reinforcements, 
+        state.territories, 
+        CURRENT_CONTINENT_DATA,
+        CURRENT_TERRITORY_INFO
+    );
+
+    // Apply Deployments (visualize them adding up)
+    for (const [tid, amount] of Object.entries(deployments)) {
+        const id = Number(tid);
+        if (state.territories[id]) {
+            updateTroopCount(state.territories[id], amount);
+            state.reinforcements -= amount;
+        }
     }
     renderMapState();
+    await wait(600);
 
-    // 2. Attack
-    let attacks = 0;
-    const attackInt = setInterval(() => {
-        if (state.gameOver || attacks >= 3) { 
-            clearInterval(attackInt);
-            if (!state.gameOver) endTurn();
-            return;
+    // 2. ATTACK
+    state.phase = 'attack';
+    updateUI();
+
+    let attackCount = 0;
+    // Cap attacks per turn to prevent infinite loops or boring 5 minute turns
+    const maxAttacks = player.difficulty === 'HARD' ? 10 : (player.difficulty === 'MEDIUM' ? 5 : 3);
+
+    while (attackCount < maxAttacks && !state.gameOver) {
+        const attackMove = getNextAttack(
+            player.id, 
+            player.difficulty || 'MEDIUM', 
+            state.territories,
+            CURRENT_TERRITORY_INFO
+        );
+
+        if (!attackMove) break;
+
+        // Execute Attack
+        const source = state.territories[attackMove.sourceId];
+        const target = state.territories[attackMove.targetId];
+        
+        if (source && target) {
+            resolveBattle(source, target);
+            await wait(800); // Visual pause between battles
+        } else {
+            break;
         }
-        const strongTerrs = Object.values(state.territories).filter(t => t.owner === state.turn && t.troops > 2);
-        if (strongTerrs.length > 0) {
-            const source = strongTerrs[Math.floor(Math.random() * strongTerrs.length)];
-            const enemyNeighbors = Array.from(source.neighbors)
-                .map(nid => state.territories[nid])
-                .filter(n => n.owner !== state.turn);
-            
-            if (enemyNeighbors.length > 0) {
-                const target = enemyNeighbors[Math.floor(Math.random() * enemyNeighbors.length)];
-                resolveBattle(source, target);
-            }
+        attackCount++;
+    }
+
+    // 3. FORTIFY
+    state.phase = 'fortify';
+    updateUI();
+    await wait(300);
+
+    const fortifyMove = getFortification(
+        player.id,
+        player.difficulty || 'MEDIUM',
+        state.territories
+    );
+
+    if (fortifyMove) {
+        const source = state.territories[fortifyMove.sourceId];
+        const target = state.territories[fortifyMove.targetId];
+        
+        if (source && target) {
+            updateTroopCount(source, -fortifyMove.amount, false);
+            updateTroopCount(target, fortifyMove.amount, false);
+            // Visual line or indicator could go here
+            renderMapState();
+            await wait(600);
         }
-        attacks++;
-    }, 600);
+    }
+
+    endTurn();
 }
 
 function checkWinCondition() {
@@ -763,7 +821,7 @@ function updateUI() {
     let borderColor = '';
     let phaseColor = '';
 
-    if (state.turn !== 0) {
+    if (player.type === 'CPU') {
         borderColor = 'var(--neon-blue)';
         phaseColor = '#00ffff';
     } else {
@@ -790,7 +848,7 @@ function updateUI() {
     mainContainer.style.boxShadow = `0 0 20px ${borderColor}, inset 0 0 50px rgba(0,0,0,0.8)`;
     currentPhaseEl.style.color = phaseColor;
 
-    const isHuman = (state.turn === 0);
+    const isHuman = (player.type === 'HUMAN');
     
     if (isHuman && state.phase === 'deploy' && state.reinforcements > 0) {
         reinforcementStatusEl.innerText = `REINFORCEMENTS: ${state.reinforcements}`;
