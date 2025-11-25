@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RETRO-RISK.NEO</title>
+    <!-- Tailwind via CDN for simplicity in this setup -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+</head>
+<body class="p-4">
+
+    <!-- Main Container -->
+    <div id="main-container" class="crt-container flex flex-col">
+        <div class="crt-overlay"></div>
+        <div class="scanline"></div>
+
+        <!-- SETUP MODAL -->
+        <div id="setup-modal" class="modal-overlay">
+            <h1 class="text-6xl font-bold text-[#ff00ff] mb-8 text-glow tracking-widest">RETRO-RISK</h1>
+            <div class="cyber-border p-8 bg-black bg-opacity-80 text-center w-96">
+                <h2 class="text-2xl text-[#00ffff] mb-6">MISSION CONFIGURATION</h2>
+                
+                <div class="mb-6">
+                    <label class="block text-white text-xl mb-2">OPPOSING PLAYERS (CPU)</label>
+                    <div class="flex justify-center gap-4 text-2xl">
+                        <input type="range" id="cpu-count" min="1" max="5" value="1" class="w-full accent-[#ff00ff]" oninput="document.getElementById('cpu-display').innerText = this.value">
+                        <span id="cpu-display" class="font-bold text-[#ff00ff]">1</span>
+                    </div>
+                </div>
+
+                <button onclick="startGame()" class="w-full border-2 border-[#00ff00] text-[#00ff00] hover:bg-[#00ff00] hover:text-black font-bold py-3 px-6 rounded text-xl transition-all shadow-[0_0_15px_#00ff00]">
+                    INITIATE SEQUENCE
+                </button>
+            </div>
+        </div>
+
+        <!-- GAME OVER MODAL -->
+        <div id="game-over-modal" class="modal-overlay hidden">
+            <h1 id="winner-title" class="text-6xl font-bold text-[#00ff00] mb-4 text-glow tracking-widest">VICTORY</h1>
+            <div class="text-2xl text-white mb-8" id="winner-msg">PLAYER 1 CONQUERED THE GRID</div>
+            <button onclick="location.reload()" class="border-2 border-white text-white hover:bg-white hover:text-black font-bold py-3 px-8 rounded text-xl transition-all shadow-[0_0_15px_#fff]">
+                REBOOT SYSTEM
+            </button>
+        </div>
+
+        <!-- Header -->
+        <header class="h-14 border-b-2 border-[#ff00ff] flex items-center px-6 justify-between bg-opacity-50 bg-black z-10">
+            <h1 class="text-3xl font-bold tracking-widest text-glow" style="color: var(--neon-pink)">
+                RETRO-RISK.NEO <span class="text-gray-500 mx-2">&gt;</span> GLOBAL_WAR
+            </h1>
+            <div class="text-xl animate-pulse" id="global-status">SYSTEM ONLINE</div>
+        </header>
+
+        <!-- Game Area -->
+        <div class="flex flex-1 overflow-hidden z-10">
+            
+            <!-- Sidebar -->
+            <aside class="w-72 border-r-2 border-[#ff00ff] p-4 flex flex-col gap-4 bg-black bg-opacity-80 backdrop-blur-sm z-20">
+                
+                <!-- Turn Info -->
+                <div class="cyber-border p-3">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-lg">TURN:</span>
+                        <span id="current-player" class="text-lg font-bold text-glow">PLAYER 1</span>
+                    </div>
+                    <div class="h-px bg-cyan-500 opacity-50 my-2"></div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-lg">PHASE:</span>
+                        <span id="current-phase" class="text-lg font-bold text-[#ffff00]">DEPLOY</span>
+                    </div>
+                </div>
+
+                <!-- Strength Bar -->
+                <div class="cyber-border p-3">
+                    <div class="text-sm mb-1 text-gray-400">GLOBAL STRENGTH</div>
+                    <div class="flex h-4 w-full border border-gray-600 bg-gray-900" id="strength-bar">
+                        <!-- Segments injected by JS -->
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="flex gap-2">
+                    <button id="end-turn-btn" class="flex-1 border-2 border-[#ffff00] text-[#ffff00] hover:bg-[#ffff00] hover:text-black font-bold py-2 px-2 rounded shadow-[0_0_10px_#ffff00] transition-all uppercase tracking-wider text-sm">
+                        End Phase
+                    </button>
+                </div>
+
+                <!-- Chat / Log -->
+                <div class="cyber-border-pink flex-1 flex flex-col overflow-hidden p-2 relative">
+                    <div class="absolute top-0 left-0 bg-[#ff00ff] text-black text-xs px-2 font-bold">CYBER_LOG</div>
+                    <div id="game-log" class="flex-1 overflow-y-auto mt-4 text-xs space-y-1 font-mono p-1">
+                        <div class="text-green-400">SYS: Awaiting configuration...</div>
+                    </div>
+                </div>
+
+            </aside>
+
+            <!-- Map Area -->
+            <main class="flex-1 relative bg-[#050510] overflow-hidden flex flex-col items-center justify-center p-4 world-grid">
+                
+                <!-- Map Grid Container -->
+                <div id="map-container" class="relative" style="width: 100%; max-width: 1000px; aspect-ratio: 4/3;">
+                    <div id="map-grid" class="grid gap-0 w-full h-full">
+                        <!-- Cells generated by JS -->
+                    </div>
+                    <!-- Connections SVG -->
+                    <svg id="connections-layer" width="100%" height="100%"></svg>
+                    <!-- Troop Badges Layer -->
+                    <div id="badges-layer"></div>
+                    <!-- Tooltip -->
+                    <div id="tooltip">Region Info</div>
+                </div>
+
+                <!-- Reinforcement Status Display (Below Map) -->
+                <div id="reinforcement-status" class="w-full text-center mt-2 text-2xl font-bold text-glow h-8 text-[#ffff00]">
+                    <!-- Populated by JS -->
+                </div>
+
+            </main>
+        </div>
+
+        <!-- Footer -->
+        <footer class="h-8 border-t-2 border-[#ff00ff] bg-black z-10 flex items-center justify-center">
+            <marquee scrollamount="5" class="text-[#00ffff] text-sm tracking-widest uppercase">
+                WORLD DOMINATION PROTOCOL ACTIVE // DEPLOY TROOPS TO STRATEGIC SECTORS // KAMCHATKA SECURED // IRKUTSK FALLEN
+            </marquee>
+        </footer>
+    </div>
+    
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
