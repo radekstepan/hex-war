@@ -721,6 +721,8 @@ function checkWinCondition() {
         document.getElementById('winner-title').innerText = "VICTORY";
         document.getElementById('winner-msg').innerText = `${winner.name} CONQUERED THE GRID`;
         document.getElementById('winner-title').style.color = winner.color;
+        
+        gameOverModal.classList.remove('hidden');
         gameOverModal.style.display = 'flex';
     }
 }
