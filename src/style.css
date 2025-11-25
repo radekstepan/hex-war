@@ -119,19 +119,19 @@ body {
 
 /* Selection States */
 .selected-source {
-    background-color: rgba(255, 255, 255, 0.9) !important;
+    background-color: rgba(255, 255, 255, 1) !important;
     box-shadow: 0 0 20px #fff !important;
     z-index: 20;
 }
 
 .valid-target {
-    background-color: rgba(255, 0, 0, 0.6) !important;
+    background-color: rgba(255, 0, 0, 1) !important;
     box-shadow: 0 0 15px red !important;
     animation: pulse-red 1s infinite;
 }
 
 .valid-fortify {
-     background-color: rgba(0, 255, 0, 0.6) !important;
+     background-color: rgba(0, 255, 0, 1) !important;
      box-shadow: 0 0 15px #00ff00 !important;
      animation: pulse-green 1s infinite;
 }
