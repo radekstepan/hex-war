@@ -1,7 +1,6 @@
 # RETRO-RISK.NEO
 
 ![Game Screenshot](./screenshot.png)
-> *Replace the image above with your actual game screenshot.*
 
 **RETRO-RISK.NEO** is a browser-based strategy game inspired by the classic board game *Risk*, re-imagined with a high-contrast Cyberpunk/CRT aesthetic. Command your troops, conquer territories, and dominate the world grid against AI opponents.
 
