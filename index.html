@@ -30,12 +30,10 @@
                 </div>
 
                 <div class="mb-8">
-                    <label class="block text-white text-xl mb-2">AI DIFFICULTY</label>
-                    <select id="difficulty-select" class="w-full bg-black border-2 border-[#ff00ff] text-[#ff00ff] p-2 font-bold text-xl outline-none focus:shadow-[0_0_10px_#ff00ff]">
-                        <option value="EASY">LEVEL 1: PRIVATE (EASY)</option>
-                        <option value="MEDIUM" selected>LEVEL 2: SERGEANT (MEDIUM)</option>
-                        <option value="HARD">LEVEL 3: GENERAL (HARD)</option>
-                    </select>
+                    <label class="block text-white text-xl mb-2">CPU CONFIGURATION</label>
+                    <div id="cpu-config-container" class="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                        <!-- Dynamic rows injected here -->
+                    </div>
                 </div>
 
                 <button id="start-btn" class="w-full border-2 border-[#00ff00] text-[#00ff00] hover:bg-[#00ff00] hover:text-black font-bold py-3 px-6 rounded text-xl transition-all shadow-[0_0_15px_#00ff00]">

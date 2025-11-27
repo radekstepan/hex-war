@@ -80,19 +80,71 @@ const strengthBar = document.getElementById('strength-bar') as HTMLElement;
 const reinforcementStatusEl = document.getElementById('reinforcement-status') as HTMLElement;
 const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
 const cpuCountInput = document.getElementById('cpu-count') as HTMLInputElement;
-const difficultySelect = document.getElementById('difficulty-select') as HTMLSelectElement;
+const cpuConfigContainer = document.getElementById('cpu-config-container') as HTMLElement;
 const tickerWrap = document.getElementById('ticker-wrap') as HTMLElement;
 
 // --- INITIALIZATION ---
 
 startBtn.onclick = startGame;
+cpuCountInput.oninput = (e) => {
+    const val = (e.target as HTMLInputElement).value;
+    document.getElementById('cpu-display')!.innerText = val;
+    updateCPUConfigUI();
+};
+
+// Init UI once
+updateCPUConfigUI();
+
+function updateCPUConfigUI() {
+    const count = parseInt(cpuCountInput.value);
+    cpuConfigContainer.innerHTML = '';
+
+    for (let i = 0; i < count; i++) {
+        const pId = i + 2; // Player 2, 3, etc.
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2';
+
+        const colorSwatch = document.createElement('div');
+        colorSwatch.className = 'w-4 h-4 border border-white';
+        colorSwatch.style.backgroundColor = PLAYER_COLORS[i % PLAYER_COLORS.length];
+
+        const label = document.createElement('span');
+        label.className = 'text-[#ff00ff] font-bold w-24';
+        label.innerText = `PLAYER ${pId}`;
+
+        const select = document.createElement('select');
+        select.className = 'flex-1 bg-black border border-[#ff00ff] text-[#ff00ff] p-1 font-mono text-sm outline-none';
+        select.id = `difficulty-select-${i}`;
+
+        const opts = [
+            { val: 'EASY', txt: 'EASY' },
+            { val: 'MEDIUM', txt: 'MEDIUM' },
+            { val: 'HARD', txt: 'HARD' }
+        ];
+
+        opts.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.val;
+            opt.innerText = o.txt;
+            if (o.val === 'MEDIUM') opt.selected = true;
+            select.appendChild(opt);
+        });
+
+        row.appendChild(colorSwatch);
+        row.appendChild(label);
+        row.appendChild(select);
+        cpuConfigContainer.appendChild(row);
+    }
+}
 
 function startGame() {
     const cpuCount = parseInt(cpuCountInput.value);
-    const difficulty = difficultySelect.value as AIDifficulty;
 
     PLAYERS = [{ id: 0, name: 'PLAYER 1', color: '#00ffff', type: 'HUMAN' }];
     for (let i = 0; i < cpuCount; i++) {
+        const diffSelect = document.getElementById(`difficulty-select-${i}`) as HTMLSelectElement;
+        const difficulty = (diffSelect ? diffSelect.value : 'MEDIUM') as AIDifficulty;
+
         PLAYERS.push({
             id: i + 1,
             name: `PLAYER ${i + 2}`,
@@ -104,7 +156,7 @@ function startGame() {
 
     state.setupMode = false;
     setupModal.style.display = 'none';
-    log(`SYS: Init sequence. AI Level: ${difficulty}`, "text-white");
+    log(`SYS: Init sequence. ${cpuCount} CPU Opponents active.`, "text-white");
 
     // Start Ticker Loop
     addTickerUpdate("GLOBAL CONFLICT INITIATED // DEPLOYMENT PHASE ACTIVE", 3);

@@ -149,20 +149,24 @@ export function getDeployments(
             // Priority 2: Push for target continent
             const tContinent = territoryInfo[t.id]?.continent;
             if (targetContinentId !== null && tContinent === targetContinentId) {
-                score += 40;
+                score += 20;
                 // Prioritize if bordering enemy in target continent
                 const hasEnemyInContinent = Array.from(t.neighbors).some(nid => {
                     const n = territories[nid];
                     return n.owner !== playerId && territoryInfo[n.id]?.continent === targetContinentId;
                 });
-                if (hasEnemyInContinent) score += 50;
+                if (hasEnemyInContinent) score += 20;
             }
 
             // Priority 3: General border defense
             if (isBorder) {
                 score += 15;
-                // Match threats
-                if (threat > currentTroops) score += (threat - currentTroops);
+                // Match threats (but don't over-commit if already safe)
+                if (threat > currentTroops) {
+                    score += (threat - currentTroops);
+                } else if (currentTroops > threat * 1.5) {
+                    score -= 50; // Already safe, discourage piling on
+                }
             }
 
             scores[t.id] = score;
@@ -327,7 +331,7 @@ export function getNextAttack(
 
                     // 1. Basic force advantage
                     if (source.troops > target.troops) score += 15;
-                    if (source.troops >= target.troops * 1.3) score += 20; // Good advantage
+                    if (source.troops >= target.troops * 1.3) score += 10; // Good advantage
                     if (source.troops < target.troops) score -= 100; // Avoid bad battles
 
                     // 2. Try to break/prevent enemy bonuses
@@ -346,9 +350,9 @@ export function getNextAttack(
                     const enemyNearBonus = (enemyContCount >= contSize - 1);
 
                     if (enemyHasBonus) {
-                        score += 50; // Break enemy bonuses
+                        score += 10; // Break enemy bonuses
                     } else if (enemyNearBonus) {
-                        score += 20; // Prevent completion
+                        score += 0; // Prevent completion
                     }
 
                     // 3. Continent consolidation
@@ -358,7 +362,7 @@ export function getNextAttack(
                     }
 
                     // 4. Opportunistic attacks
-                    if (target.troops === 1 && source.troops > 2) score += 25;
+                    if (target.troops === 1 && source.troops > 2) score += 40;
 
                     // 5. Don't attack if likely to lose
                     if (source.troops <= target.troops && !enemyHasBonus) score = -500;
@@ -479,6 +483,15 @@ export function getFortification(
                 // Evacuate internal territories to borders
                 if (analysis.internal.includes(source) && analysis.borders.includes(target)) {
                     score += 30;
+                }
+
+                // Balancing Defenses: Move from Safe Border -> Weak Border
+                if (analysis.borders.includes(source) && analysis.borders.includes(target)) {
+                    const sourceSafe = source.troops > sourceThreat * 1.5;
+                    const targetWeak = target.troops < targetThreat * 1.2;
+                    if (sourceSafe && targetWeak) {
+                        score += 40; // Peel away from stalemate to help weak spot
+                    }
                 }
 
                 if (score > 0 && (!bestMove || score > bestMove.score)) {
