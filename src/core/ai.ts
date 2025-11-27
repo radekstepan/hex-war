@@ -327,7 +327,7 @@ export function getNextAttack(
 
                     // 1. Basic force advantage
                     if (source.troops > target.troops) score += 15;
-                    if (source.troops >= target.troops * 1.3) score += 30; // Good advantage
+                    if (source.troops >= target.troops * 1.3) score += 20; // Good advantage
                     if (source.troops < target.troops) score -= 100; // Avoid bad battles
 
                     // 2. Try to break/prevent enemy bonuses
@@ -346,9 +346,9 @@ export function getNextAttack(
                     const enemyNearBonus = (enemyContCount >= contSize - 1);
 
                     if (enemyHasBonus) {
-                        score += 100; // Break enemy bonuses
+                        score += 50; // Break enemy bonuses
                     } else if (enemyNearBonus) {
-                        score += 40; // Prevent completion
+                        score += 20; // Prevent completion
                     }
 
                     // 3. Continent consolidation
@@ -358,7 +358,7 @@ export function getNextAttack(
                     }
 
                     // 4. Opportunistic attacks
-                    if (target.troops === 1 && source.troops > 2) score += 10;
+                    if (target.troops === 1 && source.troops > 2) score += 25;
 
                     // 5. Don't attack if likely to lose
                     if (source.troops <= target.troops && !enemyHasBonus) score = -500;
