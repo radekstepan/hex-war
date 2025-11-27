@@ -1,14 +1,14 @@
 import './style.css';
-import { 
-    ROWS, COLS, CLASSIC_MAP_LAYOUT, CLASSIC_TERRITORY_INFO, 
-    CLASSIC_CONTINENT_DATA, CLASSIC_CONNECTIONS, PLAYER_COLORS 
+import {
+    ROWS, COLS, CLASSIC_MAP_LAYOUT, CLASSIC_TERRITORY_INFO,
+    CLASSIC_CONTINENT_DATA, CLASSIC_CONNECTIONS, PLAYER_COLORS
 } from './constants';
 import { GameState, Territory, Player, AIDifficulty } from './types';
-import { 
-    calculateReinforcements, 
-    calculateBattleOutcome, 
-    countTerritories, 
-    generateAdjacencyMap 
+import {
+    calculateReinforcements,
+    calculateBattleOutcome,
+    countTerritories,
+    generateAdjacencyMap
 } from './core/logic';
 import { getDeployments, getNextAttack, getFortification } from './core/ai';
 import { hexToRgb } from './core/utils';
@@ -28,7 +28,7 @@ let state: GameState = {
     reinforcements: 5,
     selectedTerritory: null,
     hoveredTerritoryId: null,
-    territories: {}, 
+    territories: {},
     gameOver: false,
     setupMode: true,
     moveData: null,
@@ -90,33 +90,33 @@ startBtn.onclick = startGame;
 function startGame() {
     const cpuCount = parseInt(cpuCountInput.value);
     const difficulty = difficultySelect.value as AIDifficulty;
-    
+
     PLAYERS = [{ id: 0, name: 'PLAYER 1', color: '#00ffff', type: 'HUMAN' }];
     for (let i = 0; i < cpuCount; i++) {
-        PLAYERS.push({ 
-            id: i + 1, 
-            name: `PLAYER ${i + 2}`, 
+        PLAYERS.push({
+            id: i + 1,
+            name: `PLAYER ${i + 2}`,
             color: PLAYER_COLORS[i % PLAYER_COLORS.length],
             type: 'CPU',
             difficulty: difficulty
         });
     }
-    
+
     state.setupMode = false;
     setupModal.style.display = 'none';
     log(`SYS: Init sequence. AI Level: ${difficulty}`, "text-white");
-    
+
     // Start Ticker Loop
     addTickerUpdate("GLOBAL CONFLICT INITIATED // DEPLOYMENT PHASE ACTIVE", 3);
     requestAnimationFrame(tickerLoop);
-    
+
     initGame();
 }
 
 function initGame() {
     createGridAndTerritories();
     calculateAdjacency();
-    addManualConnections(); 
+    addManualConnections();
     drawConnections();
     assignTerritories();
     updateUI();
@@ -154,7 +154,7 @@ function tickerLoop(timestamp: number) {
     for (let i = activeTickerItems.length - 1; i >= 0; i--) {
         const item = activeTickerItems[i];
         item.x -= moveAmount;
-        
+
         item.el.style.transform = `translate3d(${item.x}px, 0, 0)`;
 
         // Remove if off screen to the left
@@ -186,10 +186,10 @@ function spawnNextTickerItem(startPos: number) {
         msgData = tickerQueue.shift()!;
     } else {
         // Use default ambient messages if queue is empty
-        msgData = { 
-            text: defaultMessages[defaultMsgIndex] + " //", 
-            priority: 0, 
-            id: -1 
+        msgData = {
+            text: defaultMessages[defaultMsgIndex] + " //",
+            priority: 0,
+            id: -1
         };
         defaultMsgIndex = (defaultMsgIndex + 1) % defaultMessages.length;
     }
@@ -202,7 +202,7 @@ function spawnNextTickerItem(startPos: number) {
     tickerWrap.appendChild(el);
 
     const width = el.getBoundingClientRect().width;
-    
+
     activeTickerItems.push({
         el: el,
         x: startPos,
@@ -215,25 +215,25 @@ function spawnNextTickerItem(startPos: number) {
 function createGridAndTerritories() {
     mapGrid.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
     mapGrid.style.gridTemplateRows = `repeat(${ROWS}, 1fr)`;
-    mapGrid.innerHTML = ''; 
-    badgesLayer.innerHTML = ''; 
+    mapGrid.innerHTML = '';
+    badgesLayer.innerHTML = '';
 
     for (let y = 0; y < ROWS; y++) {
         for (let x = 0; x < COLS; x++) {
-            const tId = CURRENT_MAP_LAYOUT[y]?.[x] || 0; 
+            const tId = CURRENT_MAP_LAYOUT[y]?.[x] || 0;
             const el = document.createElement('div');
             el.className = 'map-cell';
-            
+
             if (tId === 0) {
                 el.classList.add('cell-water');
             } else {
                 el.classList.add('cell-land', 'continent-border');
                 el.dataset.tid = tId.toString();
-                
-                const nTop = (y > 0) ? (CURRENT_MAP_LAYOUT[y-1][x] || 0) : 0;
-                const nBot = (y < ROWS - 1) ? (CURRENT_MAP_LAYOUT[y+1][x] || 0) : 0;
-                const nLeft = (x > 0) ? (CURRENT_MAP_LAYOUT[y][x-1] || 0) : 0;
-                const nRight = (x < COLS - 1) ? (CURRENT_MAP_LAYOUT[y][x+1] || 0) : 0;
+
+                const nTop = (y > 0) ? (CURRENT_MAP_LAYOUT[y - 1][x] || 0) : 0;
+                const nBot = (y < ROWS - 1) ? (CURRENT_MAP_LAYOUT[y + 1][x] || 0) : 0;
+                const nLeft = (x > 0) ? (CURRENT_MAP_LAYOUT[y][x - 1] || 0) : 0;
+                const nRight = (x < COLS - 1) ? (CURRENT_MAP_LAYOUT[y][x + 1] || 0) : 0;
 
                 if (tId !== nTop) el.style.borderTop = '2px solid #000';
                 if (tId !== nBot) el.style.borderBottom = '2px solid #000';
@@ -246,7 +246,7 @@ function createGridAndTerritories() {
                 if (!state.territories[tId]) {
                     state.territories[tId] = {
                         id: tId, owner: 0, troops: 0, cells: [],
-                        center: {x: 0, y: 0, count: 0}, neighbors: new Set(),
+                        center: { x: 0, y: 0, count: 0 }, neighbors: new Set(),
                         centerPct: { x: 0, y: 0 }
                     };
                 }
@@ -263,27 +263,27 @@ function createGridAndTerritories() {
         const avgX = (t.center.x / t.center.count) + 0.5;
         const avgY = (t.center.y / t.center.count) + 0.5;
         t.centerPct = { x: (avgX / COLS) * 100, y: (avgY / ROWS) * 100 };
-        
+
         const badge = document.createElement('div');
         badge.className = 'troop-badge';
         badge.style.left = `${t.centerPct.x}%`;
         badge.style.top = `${t.centerPct.y}%`;
         badge.id = `badge-${t.id}`;
-        
+
         // Render initial tank icon
         updateBadgeContent(badge, t.troops, PLAYERS[t.owner].color);
-        
+
         badgesLayer.appendChild(badge);
     });
 }
 
 function drawConnections() {
     connectionsLayer.innerHTML = '';
-    
+
     CURRENT_CONNECTIONS.forEach(([id1, id2]) => {
         const t1 = state.territories[id1];
         const t2 = state.territories[id2];
-        if(t1 && t2) {
+        if (t1 && t2) {
             const dist = Math.abs(t1.centerPct.x - t2.centerPct.x);
             // Wrap around line logic if distance is huge
             if (dist > 50) {
@@ -294,7 +294,7 @@ function drawConnections() {
                 line1.setAttribute('x1', leftT.centerPct.x + '%');
                 line1.setAttribute('y1', leftT.centerPct.y + '%');
                 line1.setAttribute('x2', '0%');
-                line1.setAttribute('y2', leftT.centerPct.y + '%'); 
+                line1.setAttribute('y2', leftT.centerPct.y + '%');
                 line1.classList.add('connection-line');
                 connectionsLayer.appendChild(line1);
 
@@ -322,7 +322,7 @@ function drawConnections() {
 function calculateAdjacency() {
     // Use the core logic function to get the adjacency map
     const adjMap = generateAdjacencyMap(ROWS, COLS, CURRENT_MAP_LAYOUT);
-    
+
     // Merge into state
     for (const [idStr, neighbors] of Object.entries(adjMap)) {
         const id = parseInt(idStr);
@@ -346,10 +346,10 @@ function assignTerritories() {
     tIds.sort(() => Math.random() - 0.5);
     tIds.forEach((id, index) => {
         const terr = state.territories[id];
-        terr.owner = index % PLAYERS.length; 
+        terr.owner = index % PLAYERS.length;
         terr.troops = 1;
     });
-    for(let i=0; i< (tIds.length * 2); i++) {
+    for (let i = 0; i < (tIds.length * 2); i++) {
         const id = tIds[Math.floor(Math.random() * tIds.length)];
         state.territories[id].troops++;
     }
@@ -373,11 +373,11 @@ function handleTerritoryClick(tId: number, e: MouseEvent) {
                 if (e.shiftKey) {
                     amount = state.reinforcements;
                 }
-                
-                updateTroopCount(terr, amount); 
+
+                updateTroopCount(terr, amount);
                 state.reinforcements -= amount;
                 updateUI();
-                
+
                 if (state.reinforcements === 0) {
                     setTimeout(() => {
                         state.phase = 'attack';
@@ -391,7 +391,7 @@ function handleTerritoryClick(tId: number, e: MouseEvent) {
         } else {
             log("ERR: Invalid Deployment Zone", "text-red-500");
         }
-    } 
+    }
     else if (state.phase === 'attack') {
         if (state.selectedTerritory === tId) {
             state.selectedTerritory = null;
@@ -416,22 +416,22 @@ function handleTerritoryClick(tId: number, e: MouseEvent) {
         }
     }
     else if (state.phase === 'fortify') {
-        if (state.selectedTerritory === tId && !state.fortifying) { 
+        if (state.selectedTerritory === tId && !state.fortifying) {
             state.selectedTerritory = null;
             renderMapState();
             return;
         }
-        
+
         if (!state.selectedTerritory) {
             if (terr.owner === state.turn && terr.troops > 1) {
                 state.selectedTerritory = tId;
                 log("CMD: Source selected. Click neighbor to move.", "text-white");
                 renderMapState();
-            } 
-        } 
+            }
+        }
         else {
             const source = state.territories[state.selectedTerritory];
-            
+
             if (terr.owner === state.turn && source.neighbors.has(tId)) {
                 if (source.troops > 1) {
                     // Shift-click moves all available troops (leaving 1 behind)
@@ -439,17 +439,17 @@ function handleTerritoryClick(tId: number, e: MouseEvent) {
                     if (e.shiftKey) {
                         amount = source.troops - 1;
                     }
-                    
+
                     updateTroopCount(source, -amount, false); // False = Not damage
                     updateTroopCount(terr, amount, false);
-                    
+
                     if (source.troops === 1) {
                         setTimeout(() => endTurn(), 300);
                     }
                 } else {
                     log("ERR: Source depleted.", "text-yellow-500");
                 }
-            } 
+            }
             else if (terr.owner === state.turn && terr.troops > 1) {
                 state.selectedTerritory = tId;
                 renderMapState();
@@ -462,7 +462,7 @@ function resolveBattle(attacker: Territory, defender: Territory) {
     const attName = CURRENT_TERRITORY_INFO[attacker.id].name;
     const defName = CURRENT_TERRITORY_INFO[defender.id].name;
     const oldOwner = defender.owner;
-    
+
     // VISUAL FEEDBACK: Apply Flash Classes
     attacker.cells.forEach(c => {
         c.classList.remove('attacking-source');
@@ -479,8 +479,8 @@ function resolveBattle(attacker: Territory, defender: Territory) {
         attacker.cells.forEach(c => c.classList.remove('attacking-source'));
         defender.cells.forEach(c => c.classList.remove('under-attack'));
     }, 500);
-    
-    if(state.turn === 0) log(`BATTLE: ${attName} -> ${defName}`, "text-neon-pink");
+
+    if (state.turn === 0) log(`BATTLE: ${attName} -> ${defName}`, "text-neon-pink");
 
     // UNFAIR ADVANTAGE for Hard AI
     const attackerPlayer = PLAYERS[attacker.owner];
@@ -495,12 +495,12 @@ function resolveBattle(attacker: Territory, defender: Territory) {
         // Victory
         defender.troops = 0;
         defender.owner = attacker.owner;
-        
-        updateTroopCount(defender, result.moveAmount, false); 
+
+        updateTroopCount(defender, result.moveAmount, false);
         updateTroopCount(attacker, -result.moveAmount, false); // Moving out is not damage
-        
-        if(state.turn === 0) log(`VICTORY: ${defName} captured!`, "text-green-400");
-        
+
+        if (state.turn === 0) log(`VICTORY: ${defName} captured!`, "text-green-400");
+
         // Ticker Updates: Prioritize Player Events
         if (attacker.owner === 0) {
             // Player Won
@@ -521,12 +521,12 @@ function resolveBattle(attacker: Territory, defender: Territory) {
     } else {
         // Defeat
         updateTroopCount(attacker, -result.attackerLoss, true); // Damage
-        if(state.turn === 0) log(`DEFEAT: Assault repelled.`, "text-red-500");
-        
+        if (state.turn === 0) log(`DEFEAT: Assault repelled.`, "text-red-500");
+
         // Ticker Updates for Defense
         if (defender.owner === 0) {
             // Player defended successfully
-             addTickerUpdate(`DEFENSE: ${PLAYERS[attacker.owner].name} ATTACK ON ${defName.toUpperCase()} REPELLED`, 2);
+            addTickerUpdate(`DEFENSE: ${PLAYERS[attacker.owner].name} ATTACK ON ${defName.toUpperCase()} REPELLED`, 2);
         }
     }
 
@@ -557,7 +557,7 @@ function btnAction() {
 
 function endTurn() {
     if (state.gameOver) return;
-    
+
     // Safety check: Human cannot skip deploy with troops remaining
     if (PLAYERS[state.turn].type === 'HUMAN' && state.phase === 'deploy' && state.reinforcements > 0) return;
 
@@ -569,29 +569,29 @@ function endTurn() {
 
     state.phase = 'deploy';
     state.selectedTerritory = null;
-    
+
     state.reinforcements = calculateReinforcements(state.turn, state.territories, CURRENT_CONTINENT_DATA);
-    
+
     // Log bonus for human
-    if(state.turn === 0) {
-       // Re-calculate simply to log
-       let bonus = 0;
-       for (const data of Object.values(CURRENT_CONTINENT_DATA)) {
-           const ownsAll = data.territories.every(tid => state.territories[tid].owner === 0);
-           if (ownsAll) bonus += data.bonus;
-       }
-       if(bonus > 0) log(`BONUS: Continent controlled! +${bonus}`, "text-[#ffff00]");
+    if (state.turn === 0) {
+        // Re-calculate simply to log
+        let bonus = 0;
+        for (const data of Object.values(CURRENT_CONTINENT_DATA)) {
+            const ownsAll = data.territories.every(tid => state.territories[tid].owner === 0);
+            if (ownsAll) bonus += data.bonus;
+        }
+        if (bonus > 0) log(`BONUS: Continent controlled! +${bonus}`, "text-[#ffff00]");
     }
-    
+
     // Ticker: Announce Turn
     if (PLAYERS[state.turn].type === 'HUMAN') {
         addTickerUpdate("COMMAND UPLINK ESTABLISHED // AWAITING INSTRUCTIONS", 3);
     } else {
-         addTickerUpdate(`INCOMING TRANSMISSION: ${PLAYERS[state.turn].name} MOVEMENTS DETECTED`, 1);
+        addTickerUpdate(`INCOMING TRANSMISSION: ${PLAYERS[state.turn].name} MOVEMENTS DETECTED`, 1);
     }
 
     updateUI();
-    
+
     if (PLAYERS[state.turn].type === 'CPU') {
         log(`SYS: ${PLAYERS[state.turn].name} calculating...`, "text-gray-500");
         setTimeout(cpuTurn, 800);
@@ -610,10 +610,10 @@ async function cpuTurn() {
 
     // 1. DEPLOYMENT
     const deployments = getDeployments(
-        player.id, 
-        player.difficulty || 'MEDIUM', 
-        state.reinforcements, 
-        state.territories, 
+        player.id,
+        player.difficulty || 'MEDIUM',
+        state.reinforcements,
+        state.territories,
         CURRENT_CONTINENT_DATA,
         CURRENT_TERRITORY_INFO
     );
@@ -635,12 +635,12 @@ async function cpuTurn() {
 
     let attackCount = 0;
     // Cap attacks per turn to prevent infinite loops or boring 5 minute turns
-    const maxAttacks = player.difficulty === 'HARD' ? 10 : (player.difficulty === 'MEDIUM' ? 5 : 3);
+    const maxAttacks = player.difficulty === 'HARD' ? 10 : (player.difficulty === 'MEDIUM' ? 7 : 3);
 
     while (attackCount < maxAttacks && !state.gameOver) {
         const attackMove = getNextAttack(
-            player.id, 
-            player.difficulty || 'MEDIUM', 
+            player.id,
+            player.difficulty || 'MEDIUM',
             state.territories,
             CURRENT_TERRITORY_INFO
         );
@@ -650,7 +650,7 @@ async function cpuTurn() {
         // Execute Attack
         const source = state.territories[attackMove.sourceId];
         const target = state.territories[attackMove.targetId];
-        
+
         if (source && target) {
             resolveBattle(source, target);
             await wait(800); // Visual pause between battles
@@ -674,7 +674,7 @@ async function cpuTurn() {
     if (fortifyMove) {
         const source = state.territories[fortifyMove.sourceId];
         const target = state.territories[fortifyMove.targetId];
-        
+
         if (source && target) {
             updateTroopCount(source, -fortifyMove.amount, false);
             updateTroopCount(target, fortifyMove.amount, false);
@@ -690,18 +690,18 @@ async function cpuTurn() {
 function checkWinCondition() {
     if (state.gameOver) return;
     const activePlayers = PLAYERS.filter(p => countTerritories(state.territories, p.id) > 0);
-    
+
     if (activePlayers.length === 1) {
         state.gameOver = true;
         const winner = activePlayers[0];
-        
+
         const title = document.getElementById('winner-title')!;
         const msg = document.getElementById('winner-msg')!;
-        
+
         title.innerText = "VICTORY";
         msg.innerText = `${winner.name} CONQUERED THE GRID`;
         title.style.color = winner.color;
-        
+
         addTickerUpdate(`GAME OVER: ${winner.name} CONQUERED THE GRID`, 3);
 
         gameOverModal.classList.remove('hidden');
@@ -715,14 +715,14 @@ function renderMapState() {
     Object.values(state.territories).forEach(terr => {
         const player = PLAYERS[terr.owner];
         const pColor = player.color;
-        
+
         terr.cells.forEach(cell => {
             cell.style.backgroundColor = `rgba(${hexToRgb(pColor)}, 0.6)`;
-            cell.style.boxShadow = 'none'; 
+            cell.style.boxShadow = 'none';
             cell.classList.remove('selected-source', 'valid-target', 'valid-fortify');
 
             if (state.selectedTerritory === terr.id) cell.classList.add('selected-source');
-            
+
             if (state.phase === 'attack' && state.selectedTerritory) {
                 const selectedT = state.territories[state.selectedTerritory];
                 if (selectedT.neighbors.has(terr.id) && terr.owner !== state.turn) {
@@ -736,9 +736,9 @@ function renderMapState() {
                 }
             }
         });
-        
+
         const badge = document.getElementById(`badge-${terr.id}`);
-        if(badge) {
+        if (badge) {
             updateBadgeContent(badge, terr.troops, pColor);
         }
     });
@@ -748,10 +748,10 @@ function renderMapState() {
 function updateTroopCount(terr: Territory, delta: number, isBattleDamage: boolean = true) {
     terr.troops += delta;
     const badge = document.getElementById(`badge-${terr.id}`);
-    
-    if(badge) {
+
+    if (badge) {
         updateBadgeContent(badge, terr.troops, PLAYERS[terr.owner].color);
-        
+
         let animClass = '';
         if (delta > 0) {
             animClass = 'anim-up';
@@ -763,7 +763,7 @@ function updateTroopCount(terr: Territory, delta: number, isBattleDamage: boolea
                 animClass = 'anim-neutral'; // Neutral flash
             }
         }
-        
+
         badge.classList.remove('anim-up', 'anim-down', 'anim-neutral');
         void badge.offsetWidth; // Trigger reflow
         badge.classList.add(animClass);
@@ -805,7 +805,7 @@ function updateStrengthBar() {
 
     const totalStrength = playerStrengths.reduce((acc, p) => acc + p.strength, 0);
     strengthBar.innerHTML = '';
-    
+
     playerStrengths.forEach(pData => {
         if (pData.strength > 0) {
             const pct = (pData.strength / totalStrength) * 100;
@@ -832,31 +832,31 @@ function updateUI() {
         borderColor = 'var(--neon-blue)';
         phaseColor = '#00ffff';
     } else {
-        switch(state.phase) {
-            case 'deploy': 
-                borderColor = 'var(--neon-yellow)'; 
+        switch (state.phase) {
+            case 'deploy':
+                borderColor = 'var(--neon-yellow)';
                 phaseColor = '#ffff00';
                 break;
-            case 'attack': 
-                borderColor = 'var(--neon-pink)'; 
+            case 'attack':
+                borderColor = 'var(--neon-pink)';
                 phaseColor = '#ff00ff';
                 break;
-            case 'fortify': 
-                borderColor = 'var(--neon-green)'; 
+            case 'fortify':
+                borderColor = 'var(--neon-green)';
                 phaseColor = '#00ff00';
                 break;
-            default: 
+            default:
                 borderColor = 'var(--neon-pink)';
                 phaseColor = '#ff00ff';
         }
     }
-    
+
     mainContainer.style.borderColor = borderColor;
     mainContainer.style.boxShadow = `0 0 20px ${borderColor}, inset 0 0 50px rgba(0,0,0,0.8)`;
     currentPhaseEl.style.color = phaseColor;
 
     const isHuman = (player.type === 'HUMAN');
-    
+
     if (isHuman && state.phase === 'deploy' && state.reinforcements > 0) {
         reinforcementStatusEl.innerText = `REINFORCEMENTS: ${state.reinforcements}`;
         reinforcementStatusEl.style.opacity = '1';
@@ -864,7 +864,7 @@ function updateUI() {
         reinforcementStatusEl.innerText = "";
         reinforcementStatusEl.style.opacity = '0';
     }
-    
+
     if (isHuman) {
         endTurnBtn.style.display = 'block';
         endTurnBtn.classList.remove('opacity-50');
@@ -891,7 +891,7 @@ function updateUI() {
 function setupOptimizedHover() {
     mapGrid.addEventListener('mouseover', handleGridHover);
     mapGrid.addEventListener('mouseout', (e) => {
-            if (!mapGrid.contains(e.relatedTarget as Node)) clearHover();
+        if (!mapGrid.contains(e.relatedTarget as Node)) clearHover();
     });
 }
 
@@ -899,16 +899,16 @@ function handleGridHover(e: Event) {
     const target = e.target as HTMLElement;
     if (!target.classList.contains('cell-land')) return;
     const tId = parseInt(target.dataset.tid || "0");
-    if (state.hoveredTerritoryId === tId) return; 
+    if (state.hoveredTerritoryId === tId) return;
 
     clearHover();
     state.hoveredTerritoryId = tId;
     const terr = state.territories[tId];
-    
+
     if (terr) {
         terr.cells.forEach(c => c.classList.add('region-hover'));
         const info = CURRENT_TERRITORY_INFO[tId];
-        if(info) {
+        if (info) {
             tooltip.innerHTML = `<span style="color:${PLAYERS[terr.owner].color}">${info.name}</span>`;
             tooltip.style.left = terr.centerPct.x + '%';
             tooltip.style.top = terr.centerPct.y + '%';
@@ -929,7 +929,7 @@ function clearHover() {
 function log(msg: string, colorClass = "text-gray-400") {
     const entry = document.createElement('div');
     entry.className = colorClass;
-    const time = new Date().toLocaleTimeString('en-US', {hour12: false, hour: "numeric", minute: "numeric", second: "numeric"});
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: "numeric", minute: "numeric", second: "numeric" });
     entry.innerText = `[${time}] ${msg}`;
     logContainer.appendChild(entry);
     logContainer.scrollTop = logContainer.scrollHeight;
